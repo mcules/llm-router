@@ -1,0 +1,14 @@
+services:
+  router-server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.server
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    networks:
+      - llmnet
+
+networks:
+  llmnet:
+    driver: bridge

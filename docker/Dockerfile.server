@@ -1,0 +1,18 @@
+FROM golang:1.22-alpine AS build
+WORKDIR /src
+
+# Copy module files first for better layer caching.
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the rest of the source.
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/server ./cmd/server
+
+FROM alpine:3.20
+WORKDIR /app
+COPY --from=build /out/server /app/server
+COPY internal/ui/templates /app/internal/ui/templates
+EXPOSE 8080 9090
+ENTRYPOINT ["/app/server"]

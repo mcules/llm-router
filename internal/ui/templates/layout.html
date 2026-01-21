@@ -1,0 +1,28 @@
+{{/* Comments intentionally omitted in templates. */}}
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>LLM Router UI</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; }
+    nav a { margin-right: 12px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; }
+    .muted { color: #666; }
+    .badge { display:inline-block; padding:2px 8px; border:1px solid #ddd; border-radius:999px; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/ui/">Dashboard</a>
+    <a href="/ui/nodes">Nodes</a>
+    <a href="/ui/models">Models</a>
+  </nav>
+  <hr/>
+  {{ if eq .Page "dashboard.html" }}{{ template "dashboard.html" .VM }}{{ end }}
+  {{ if eq .Page "nodes.html" }}{{ template "nodes.html" .VM }}{{ end }}
+  {{ if eq .Page "models.html" }}{{ template "models.html" .VM }}{{ end }}
+</body>
+</html>

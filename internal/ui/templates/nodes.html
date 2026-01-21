@@ -1,0 +1,28 @@
+{{ define "nodes.html" }}
+<h1>Nodes</h1>
+<p class="muted">Now: {{ .Now }}</p>
+<table>
+  <thead>
+    <tr>
+      <th>Node</th>
+      <th>Last heartbeat</th>
+      <th>RAM avail</th>
+      <th>RAM total</th>
+      <th>Inflight</th>
+      <th>Models</th>
+    </tr>
+  </thead>
+  <tbody>
+  {{ range .Nodes }}
+    <tr>
+      <td>{{ .NodeID }}</td>
+      <td>{{ .LastHeartbeat }}</td>
+      <td>{{ .RAMAvailBytes }}</td>
+      <td>{{ .RAMTotalBytes }}</td>
+      <td>{{ .InflightRequests }}</td>
+      <td>{{ len .Models }}</td>
+    </tr>
+  {{ end }}
+  </tbody>
+</table>
+{{ end }}

@@ -1,0 +1,26 @@
+{{ define "models.html" }}
+<h1>Models</h1>
+<p class="muted">Now: {{ .Now }}</p>
+<table>
+  <thead>
+    <tr>
+      <th>Model</th>
+      <th>Node</th>
+      <th>State</th>
+      <th>Loaded since</th>
+      <th>Last seen</th>
+    </tr>
+  </thead>
+  <tbody>
+  {{ range .Models }}
+    <tr>
+      <td>{{ .ModelID }}</td>
+      <td>{{ .NodeID }}</td>
+      <td>{{ .State }}</td>
+      <td>{{ .LoadedSince }}</td>
+      <td>{{ .LastSeen }}</td>
+    </tr>
+  {{ end }}
+  </tbody>
+</table>
+{{ end }}

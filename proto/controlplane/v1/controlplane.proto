@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package controlplane.v1;
+
+option go_package = "your.module/gen/controlplane/v1;controlplanev1";
+
+// Bi-directional stream: nodes push status; server pushes commands.
+service NodeControl {
+  rpc Stream(stream NodeMessage) returns (stream ServerMessage);
+}
+
+message NodeMessage {
+  oneof msg {
+    NodeHello hello = 1;
+    NodeStatus status = 2;
+    CommandAck ack = 3;
+  }
+}
+
+message ServerMessage {
+  oneof msg {
+    ServerHello hello = 1;
+    UnloadModel unload_model = 2;
+    Ping ping = 3;
+  }
+}
+
+message NodeHello {
+  string node_id = 1;
+  string version = 2;
+  string llama_base_url = 3; // e.g. http://llama:8081
+}
+
+message NodeStatus {
+  int64 ts_unix_ms = 1;
+
+  uint64 ram_total_bytes = 2;
+  uint64 ram_available_bytes = 3;
+
+  uint32 inflight_requests = 4;
+
+  repeated ModelResidency models = 5;
+}
+
+message ModelResidency {
+  string model_id = 1;
+  ModelState state = 2; // derived from llama.cpp /models status.value
+  int64 loaded_since_unix_ms = 3; // best effort
+}
+
+enum ModelState {
+  MODEL_STATE_UNSPECIFIED = 0;
+  MODEL_STATE_LOADING = 1;
+  MODEL_STATE_READY = 2;
+  MODEL_STATE_UNLOADED = 3;
+  MODEL_STATE_ERROR = 4;
+}
+
+message UnloadModel {
+  string request_id = 1;
+  string model_id = 2;
+}
+
+message CommandAck {
+  string request_id = 1;
+  bool ok = 2;
+  string error = 3;
+}
+
+message ServerHello {
+  string server_version = 1;
+}
+
+message Ping {
+  int64 ts_unix_ms = 1;
+}
