@@ -2,9 +2,8 @@ syntax = "proto3";
 
 package controlplane.v1;
 
-option go_package = "your.module/gen/controlplane/v1;controlplanev1";
+option go_package = "github.com/mcules/llm-router/gen/controlplane/v1;controlplanev1";
 
-// Bi-directional stream: nodes push status; server pushes commands.
 service NodeControl {
   rpc Stream(stream NodeMessage) returns (stream ServerMessage);
 }
@@ -28,7 +27,8 @@ message ServerMessage {
 message NodeHello {
   string node_id = 1;
   string version = 2;
-  string llama_base_url = 3; // e.g. http://llama:8081
+  string llama_base_url = 3;   // agent -> llama (internal), e.g. http://llama:8001
+  string data_plane_url = 4;   // server -> llama (external), e.g. http://node1:8001
 }
 
 message NodeStatus {
@@ -44,8 +44,8 @@ message NodeStatus {
 
 message ModelResidency {
   string model_id = 1;
-  ModelState state = 2; // derived from llama.cpp /models status.value
-  int64 loaded_since_unix_ms = 3; // best effort
+  ModelState state = 2;
+  int64 loaded_since_unix_ms = 3;
 }
 
 enum ModelState {

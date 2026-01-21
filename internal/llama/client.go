@@ -1,14 +1,13 @@
 package llama
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 )
-
-// Comments in this file are intentionally in English.
 
 type Client struct {
 	BaseURL string
@@ -19,7 +18,7 @@ func New(baseURL string) *Client {
 	return &Client{
 		BaseURL: baseURL,
 		HTTP: &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: 10 * time.Second,
 		},
 	}
 }
@@ -72,7 +71,7 @@ func (c *Client) GetSlotsInflight(ctx context.Context) (uint32, error) {
 	}
 	defer res.Body.Close()
 
-	// If /slots is disabled, llama.cpp may return an error or non-2xx.
+	// If /slots is disabled, llama.cpp may return non-2xx. Treat as 0 inflight.
 	if res.StatusCode/100 != 2 {
 		return 0, nil
 	}
@@ -89,4 +88,28 @@ func (c *Client) GetSlotsInflight(ctx context.Context) (uint32, error) {
 		}
 	}
 	return inflight, nil
+}
+
+type unloadReq struct {
+	Model string `json:"model"`
+}
+
+func (c *Client) UnloadModel(ctx context.Context, modelID string) error {
+	body, _ := json.Marshal(unloadReq{Model: modelID})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/models/unload", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := c.HTTP.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode/100 != 2 {
+		return fmt.Errorf("unload status=%d", res.StatusCode)
+	}
+	return nil
 }

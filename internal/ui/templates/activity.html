@@ -1,0 +1,30 @@
+{{ define "activity.html" }}{{ template "layout.html" . }}{{ end }}
+{{ define "page_content" }}{{ template "content_activity" . }}{{ end }}
+
+{{ define "content_activity" }}
+<h1>Activity</h1>
+<p class="muted">Now: {{ .Now }}</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Time</th>
+      <th>Type</th>
+      <th>Node</th>
+      <th>Model</th>
+      <th>Note</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{ range .Activity }}
+    <tr>
+      <td>{{ .At }}</td>
+      <td>{{ .Type }}</td>
+      <td>{{ .Node }}</td>
+      <td>{{ .Model }}</td>
+      <td>{{ .Note }}</td>
+    </tr>
+    {{ end }}
+  </tbody>
+</table>
+{{ end }}

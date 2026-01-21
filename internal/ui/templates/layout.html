@@ -1,4 +1,4 @@
-{{/* Comments intentionally omitted in templates. */}}
+{{ define "layout.html" }}
 <!doctype html>
 <html>
 <head>
@@ -19,10 +19,11 @@
     <a href="/ui/">Dashboard</a>
     <a href="/ui/nodes">Nodes</a>
     <a href="/ui/models">Models</a>
+    <a href="/ui/policies">Policies</a>
+    <a href="/ui/activity">Activity</a>
   </nav>
   <hr/>
-  {{ if eq .Page "dashboard.html" }}{{ template "dashboard.html" .VM }}{{ end }}
-  {{ if eq .Page "nodes.html" }}{{ template "nodes.html" .VM }}{{ end }}
-  {{ if eq .Page "models.html" }}{{ template "models.html" .VM }}{{ end }}
+  {{ template "page_content" . }}
 </body>
 </html>
+{{ end }}

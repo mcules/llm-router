@@ -10,23 +10,27 @@ import (
 	"strings"
 	"time"
 
-	controlplanev1 "your.module/gen/controlplane/v1"
-	"your.module/internal/llama"
+	controlplanev1 "github.com/mcules/llm-router/gen/controlplane/v1"
+	"github.com/mcules/llm-router/internal/llama"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// Comments in this file are intentionally in English.
-
 func main() {
 	nodeID := mustEnv("NODE_ID")
 	serverAddr := mustEnv("SERVER_GRPC_ADDR")
+
+	// Internal URL for agent->llama (same docker network as llama container)
 	llamaBase := mustEnv("LLAMA_BASE_URL")
+
+	// External URL for server->llama (must be reachable from server)
+	dataPlane := envOr("DATA_PLANE_URL", llamaBase)
+
 	meminfoPath := envOr("HOST_MEMINFO_PATH", "/host/proc/meminfo")
 
 	heartbeatSec := envOrInt("HEARTBEAT_SECONDS", 1)
-	pollModelsSec := envOrInt("POLL_MODELS_SECONDS", 5)
+	pollModelsBaseSec := envOrInt("POLL_MODELS_SECONDS", 5)
 	pollSlotsSec := envOrInt("POLL_SLOTS_SECONDS", 1)
 
 	ll := llama.New(llamaBase)
@@ -40,7 +44,7 @@ func main() {
 	client := controlplanev1.NewNodeControlClient(conn)
 
 	for {
-		if err := runOnce(client, ll, nodeID, meminfoPath, heartbeatSec, pollModelsSec, pollSlotsSec); err != nil {
+		if err := runOnce(client, ll, nodeID, meminfoPath, dataPlane, heartbeatSec, pollModelsBaseSec, pollSlotsSec); err != nil {
 			log.Printf("stream ended: %v", err)
 		}
 		time.Sleep(2 * time.Second)
@@ -50,8 +54,8 @@ func main() {
 func runOnce(
 	client controlplanev1.NodeControlClient,
 	ll *llama.Client,
-	nodeID, meminfoPath string,
-	heartbeatSec, pollModelsSec, pollSlotsSec int,
+	nodeID, meminfoPath, dataPlaneURL string,
+	heartbeatSec, pollModelsBaseSec, pollSlotsSec int,
 ) error {
 	ctx := context.Background()
 	stream, err := client.Stream(ctx)
@@ -66,6 +70,7 @@ func runOnce(
 				NodeId:       nodeID,
 				Version:      "dev",
 				LlamaBaseUrl: ll.BaseURL,
+				DataPlaneUrl: dataPlaneURL,
 			},
 		},
 	}); err != nil {
@@ -83,16 +88,20 @@ func runOnce(
 			}
 			switch msg := in.Msg.(type) {
 			case *controlplanev1.ServerMessage_UnloadModel:
-				// Phase 1: command handling placeholder (we will implement unload in Phase 3).
-				_ = msg
+				reqID := msg.UnloadModel.RequestId
+				modelID := msg.UnloadModel.ModelId
+
+				err := ll.UnloadModel(context.Background(), modelID)
+				ack := &controlplanev1.CommandAck{
+					RequestId: reqID,
+					Ok:        err == nil,
+				}
+				if err != nil {
+					ack.Error = err.Error()
+				}
+
 				_ = stream.Send(&controlplanev1.NodeMessage{
-					Msg: &controlplanev1.NodeMessage_Ack{
-						Ack: &controlplanev1.CommandAck{
-							RequestId: msg.UnloadModel.RequestId,
-							Ok:        false,
-							Error:     "unload not implemented in phase 1",
-						},
-					},
+					Msg: &controlplanev1.NodeMessage_Ack{Ack: ack},
 				})
 			default:
 				// Ignore.
@@ -101,21 +110,23 @@ func runOnce(
 	}()
 
 	var (
-		lastModels   *llama.ModelsResponse
-		lastModelsAt time.Time
-		inflight     uint32
+		lastModels *llama.ModelsResponse
+		inflight   uint32
 	)
 
-	tHeartbeat := time.NewTicker(time.Duration(heartbeatSec) * time.Second)
-	tModels := time.NewTicker(time.Duration(pollModelsSec) * time.Second)
-	tSlots := time.NewTicker(time.Duration(pollSlotsSec) * time.Second)
-	defer tHeartbeat.Stop()
-	defer tModels.Stop()
-	defer tSlots.Stop()
-
 	// Prime initial reads quickly.
-	_ = refreshModels(ctx, ll, &lastModels, &lastModelsAt)
+	_ = refreshModels(ctx, ll, &lastModels)
 	_ = refreshSlots(ctx, ll, &inflight)
+
+	tHeartbeat := time.NewTicker(time.Duration(heartbeatSec) * time.Second)
+	defer tHeartbeat.Stop()
+
+	// Models polling: dynamic (fast while any model is loading)
+	modelsTicker := time.NewTicker(time.Duration(pollModelsBaseSec) * time.Second)
+	defer modelsTicker.Stop()
+
+	tSlots := time.NewTicker(time.Duration(pollSlotsSec) * time.Second)
+	defer tSlots.Stop()
 
 	for {
 		select {
@@ -125,8 +136,15 @@ func runOnce(
 		case <-tSlots.C:
 			_ = refreshSlots(ctx, ll, &inflight)
 
-		case <-tModels.C:
-			_ = refreshModels(ctx, ll, &lastModels, &lastModelsAt)
+		case <-modelsTicker.C:
+			_ = refreshModels(ctx, ll, &lastModels)
+
+			// If any model is loading, temporarily poll faster (1s).
+			if anyLoading(lastModels) && pollModelsBaseSec > 1 {
+				modelsTicker.Reset(1 * time.Second)
+			} else {
+				modelsTicker.Reset(time.Duration(pollModelsBaseSec) * time.Second)
+			}
 
 		case <-tHeartbeat.C:
 			ramTotal, ramAvail, err := readMeminfo(meminfoPath)
@@ -152,13 +170,12 @@ func runOnce(
 	}
 }
 
-func refreshModels(ctx context.Context, ll *llama.Client, last **llama.ModelsResponse, lastAt *time.Time) error {
+func refreshModels(ctx context.Context, ll *llama.Client, last **llama.ModelsResponse) error {
 	m, err := ll.GetModels(ctx)
 	if err != nil {
 		return err
 	}
 	*last = m
-	*lastAt = time.Now()
 	return nil
 }
 
@@ -169,6 +186,18 @@ func refreshSlots(ctx context.Context, ll *llama.Client, inflight *uint32) error
 	}
 	*inflight = n
 	return nil
+}
+
+func anyLoading(m *llama.ModelsResponse) bool {
+	if m == nil {
+		return false
+	}
+	for _, x := range m.Data {
+		if strings.EqualFold(x.Status.Value, "loading") {
+			return true
+		}
+	}
+	return false
 }
 
 func convertModels(m *llama.ModelsResponse) []*controlplanev1.ModelResidency {
@@ -182,7 +211,7 @@ func convertModels(m *llama.ModelsResponse) []*controlplanev1.ModelResidency {
 		out = append(out, &controlplanev1.ModelResidency{
 			ModelId:           x.ID,
 			State:             mapLlamaStatus(x.Status.Value, x.Status.Failed),
-			LoadedSinceUnixMs: now, // best effort for phase 1
+			LoadedSinceUnixMs: now, // best effort for now
 		})
 	}
 	return out
@@ -228,7 +257,6 @@ func readMeminfo(path string) (totalBytes uint64, availBytes uint64, err error) 
 }
 
 func parseMeminfoKB(line string) uint64 {
-	// Example: "MemAvailable:   123456 kB"
 	fields := strings.Fields(line)
 	if len(fields) < 2 {
 		return 0

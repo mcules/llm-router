@@ -1,4 +1,7 @@
-{{ define "dashboard.html" }}
+{{ define "dashboard.html" }}{{ template "layout.html" . }}{{ end }}
+{{ define "page_content" }}{{ template "content_dashboard" . }}{{ end }}
+
+{{ define "content_dashboard" }}
 <h1>Dashboard</h1>
 <p class="muted">Now: {{ .Now }}</p>
 <p><span class="badge">Nodes: {{ len .Nodes }}</span></p>

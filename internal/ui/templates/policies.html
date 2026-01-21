@@ -1,0 +1,60 @@
+{{ define "policies.html" }}{{ template "layout.html" . }}{{ end }}
+{{ define "page_content" }}{{ template "content_policies" . }}{{ end }}
+
+{{ define "content_policies" }}
+<h1>Policies</h1>
+<p class="muted">Now: {{ .Now }}</p>
+
+<h2>Add / Update Policy</h2>
+<form method="post" action="/ui/policies/save">
+  <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+    <div>
+      <label>Model ID</label><br/>
+      <input name="model_id" style="min-width:320px" required />
+    </div>
+    <div>
+      <label>RAM Required (bytes)</label><br/>
+      <input name="ram_required_bytes" />
+    </div>
+    <div>
+      <label>TTL (secs)</label><br/>
+      <input name="ttl_secs" />
+    </div>
+    <div>
+      <label>Priority</label><br/>
+      <input name="priority" />
+    </div>
+    <div>
+      <label>Pinned</label><br/>
+      <input type="checkbox" name="pinned" />
+    </div>
+    <div>
+      <button type="submit">Save</button>
+    </div>
+  </div>
+</form>
+
+<h2>Existing Policies</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Model</th>
+      <th>RAM Required</th>
+      <th>TTL</th>
+      <th>Priority</th>
+      <th>Pinned</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{ range .Policies }}
+    <tr>
+      <td>{{ .ModelID }}</td>
+      <td>{{ .RAMRequiredBytes }}</td>
+      <td>{{ .TTLSecs }}</td>
+      <td>{{ .Priority }}</td>
+      <td>{{ if .Pinned }}yes{{ else }}no{{ end }}</td>
+    </tr>
+    {{ end }}
+  </tbody>
+</table>
+{{ end }}

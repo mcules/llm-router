@@ -1,41 +1,45 @@
 services:
   llama:
-    image: ghcr.io/ggerganov/llama.cpp:full
+    image: ghcr.io/ggml-org/llama.cpp:server-vulkan
+    container_name: llm-router-llama
+    restart: unless-stopped
+    devices: [ /dev/dri ]
+    group_add: [ video ]
+    ports:
+      - "${NODE_PORT}:${NODE_PORT}"
     command: >
-      /app/llama-server
       --host 0.0.0.0
-      --port 8081
-      --router
-      --models-dir /models
+      --port "${NODE_PORT}"
+      --models-dir ${MODELS_DIR}
+      --embeddings
       --no-webui
     volumes:
       - /models:/models:ro
-    networks:
-      - llmnode
+    networks: [ llmnode ]
 
   node-agent:
     build:
       context: .
-      dockerfile: docker/Dockerfile.node-agent
+      dockerfile: docker/Dockerfile.node
+    container_name: llm-router-node-agent
     environment:
-      - NODE_ID=node-1
-      - SERVER_GRPC_ADDR=router-server:9090
-      - LLAMA_BASE_URL=http://llama:8081
+      - NODE_ID=${NODE_ID}
+      - SERVER_GRPC_ADDR=llm-router-server:${SERVER_PORT}
+      - LLAMA_BASE_URL=http://llm-router-llama:${NODE_PORT}
       - HOST_MEMINFO_PATH=/host/proc/meminfo
       - HEARTBEAT_SECONDS=1
       - POLL_MODELS_SECONDS=5
       - POLL_SLOTS_SECONDS=1
+      - DATA_PLANE_URL=http://${NODE_IP}:${NODE_PORT}
     volumes:
       - /proc:/host/proc:ro
       - /sys/fs/cgroup:/host/sys/fs/cgroup:ro
-    depends_on:
-      - llama
+    depends_on: [ llama ]
     networks:
       - llmnode
       - llmnet
 
 networks:
   llmnode:
-    driver: bridge
   llmnet:
-    external: false
+    external: true

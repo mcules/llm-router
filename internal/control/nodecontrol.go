@@ -3,28 +3,69 @@ package control
 import (
 	"io"
 	"log"
+	"sync"
 	"time"
 
-	controlplanev1 "your.module/gen/controlplane/v1"
-	"your.module/internal/state"
+	controlplanev1 "github.com/mcules/llm-router/gen/controlplane/v1"
+	"github.com/mcules/llm-router/internal/state"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-// Comments in this file are intentionally in English.
+type ModelStateNotifier interface {
+	NotifyModelState(nodeID, modelID string, st state.ModelState)
+}
 
 type NodeControlService struct {
 	controlplanev1.UnimplementedNodeControlServer
-	Cluster *state.ClusterState
+	Cluster  *state.ClusterState
+	Notifier ModelStateNotifier
+
+	mu      sync.RWMutex
+	streams map[string]*nodeStream
 }
 
-func NewNodeControlService(cluster *state.ClusterState) *NodeControlService {
-	return &NodeControlService{Cluster: cluster}
+type nodeStream struct {
+	sendMu sync.Mutex
+	stream controlplanev1.NodeControl_StreamServer
+}
+
+func NewNodeControlService(cluster *state.ClusterState, notifier ModelStateNotifier) *NodeControlService {
+	return &NodeControlService{
+		Cluster:  cluster,
+		Notifier: notifier,
+		streams:  map[string]*nodeStream{},
+	}
+}
+
+func (s *NodeControlService) SendUnload(nodeID, requestID, modelID string) error {
+	s.mu.RLock()
+	ns := s.streams[nodeID]
+	s.mu.RUnlock()
+	if ns == nil {
+		return status.Errorf(codes.Unavailable, "node stream not available: %s", nodeID)
+	}
+
+	msg := &controlplanev1.ServerMessage{
+		Msg: &controlplanev1.ServerMessage_UnloadModel{
+			UnloadModel: &controlplanev1.UnloadModel{
+				RequestId: requestID,
+				ModelId:   modelID,
+			},
+		},
+	}
+
+	ns.sendMu.Lock()
+	defer ns.sendMu.Unlock()
+
+	if err := ns.stream.Send(msg); err != nil {
+		return status.Errorf(codes.Unavailable, "send unload: %v", err)
+	}
+	return nil
 }
 
 func (s *NodeControlService) Stream(stream controlplanev1.NodeControl_StreamServer) error {
-	// Send hello once.
 	_ = stream.Send(&controlplanev1.ServerMessage{
 		Msg: &controlplanev1.ServerMessage_Hello{
 			Hello: &controlplanev1.ServerHello{ServerVersion: "dev"},
@@ -36,43 +77,81 @@ func (s *NodeControlService) Stream(stream controlplanev1.NodeControl_StreamServ
 	for {
 		in, err := stream.Recv()
 		if err == io.EOF {
+			s.detach(nodeID, stream)
 			return nil
 		}
 		if err != nil {
+			s.detach(nodeID, stream)
 			return status.Errorf(codes.Unavailable, "stream recv: %v", err)
 		}
 
 		switch msg := in.Msg.(type) {
 		case *controlplanev1.NodeMessage_Hello:
 			nodeID = msg.Hello.NodeId
-			s.Cluster.UpsertNodeHello(nodeID, msg.Hello.Version, msg.Hello.LlamaBaseUrl)
-			log.Printf("node hello: id=%s version=%s llama=%s", msg.Hello.NodeId, msg.Hello.Version, msg.Hello.LlamaBaseUrl)
+
+			s.Cluster.UpsertNodeHello(
+				nodeID,
+				msg.Hello.Version,
+				msg.Hello.LlamaBaseUrl,
+				msg.Hello.DataPlaneUrl,
+			)
+
+			s.attach(nodeID, stream)
+			log.Printf("node hello: id=%s version=%s llama=%s data=%s",
+				msg.Hello.NodeId, msg.Hello.Version, msg.Hello.LlamaBaseUrl, msg.Hello.DataPlaneUrl)
 
 		case *controlplanev1.NodeMessage_Status:
 			if nodeID == "" {
-				// Accept status even if hello was not received yet (best effort).
 				nodeID = "unknown"
 			}
+
 			models := map[string]state.ModelResidency{}
 			now := time.Now()
 
 			for _, m := range msg.Status.Models {
+				st := mapModelState(m.State)
+
 				models[m.ModelId] = state.ModelResidency{
 					ModelID:     m.ModelId,
-					State:       mapModelState(m.State),
+					State:       st,
 					LoadedSince: unixMsToTime(m.LoadedSinceUnixMs),
 					LastSeen:    now,
 				}
+
+				// Notify router gates (READY signals unblock waiting requests).
+				if s.Notifier != nil {
+					s.Notifier.NotifyModelState(nodeID, m.ModelId, st)
+				}
 			}
+
 			s.Cluster.UpdateNodeStatus(nodeID, msg.Status.RamTotalBytes, msg.Status.RamAvailableBytes, msg.Status.InflightRequests, models)
 
 		case *controlplanev1.NodeMessage_Ack:
-			// Phase 1: just log acks.
-			log.Printf("node ack: ok=%v err=%s", msg.Ack.Ok, msg.Ack.Error)
+			log.Printf("node ack: req=%s ok=%v err=%s", msg.Ack.RequestId, msg.Ack.Ok, msg.Ack.Error)
 
 		default:
 			// Ignore unknown messages for forward compatibility.
 		}
+	}
+}
+
+func (s *NodeControlService) attach(nodeID string, stream controlplanev1.NodeControl_StreamServer) {
+	if nodeID == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.streams[nodeID] = &nodeStream{stream: stream}
+}
+
+func (s *NodeControlService) detach(nodeID string, stream controlplanev1.NodeControl_StreamServer) {
+	if nodeID == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if cur := s.streams[nodeID]; cur != nil && cur.stream == stream {
+		delete(s.streams, nodeID)
 	}
 }
 

@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-// Comments in this file are intentionally in English.
-
 type ModelState string
 
 const (
@@ -27,11 +25,23 @@ type NodeSnapshot struct {
 	NodeID           string
 	Version          string
 	LlamaBaseURL     string
+	DataPlaneURL     string
 	LastHeartbeat    time.Time
 	RAMTotalBytes    uint64
 	RAMAvailBytes    uint64
 	InflightRequests uint32
 	Models           map[string]ModelResidency
+}
+
+// IsOnline returns true if the node heartbeat is within the given TTL.
+func (n *NodeSnapshot) IsOnline(now time.Time, ttl time.Duration) bool {
+	if ttl <= 0 {
+		return true
+	}
+	if n.LastHeartbeat.IsZero() {
+		return false
+	}
+	return now.Sub(n.LastHeartbeat) <= ttl
 }
 
 type ClusterState struct {
@@ -45,7 +55,7 @@ func NewClusterState() *ClusterState {
 	}
 }
 
-func (cs *ClusterState) UpsertNodeHello(nodeID, version, llamaBaseURL string) {
+func (cs *ClusterState) UpsertNodeHello(nodeID, version, llamaBaseURL, dataPlaneURL string) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
@@ -59,6 +69,7 @@ func (cs *ClusterState) UpsertNodeHello(nodeID, version, llamaBaseURL string) {
 	}
 	n.Version = version
 	n.LlamaBaseURL = llamaBaseURL
+	n.DataPlaneURL = dataPlaneURL
 	n.LastHeartbeat = time.Now()
 }
 
@@ -88,6 +99,21 @@ func (cs *ClusterState) Snapshot() []*NodeSnapshot {
 	out := make([]*NodeSnapshot, 0, len(cs.nodes))
 	for _, n := range cs.nodes {
 		out = append(out, cloneNode(n))
+	}
+	return out
+}
+
+// SnapshotOnline returns a snapshot filtered by heartbeat TTL.
+func (cs *ClusterState) SnapshotOnline(now time.Time, ttl time.Duration) []*NodeSnapshot {
+	all := cs.Snapshot()
+	if ttl <= 0 {
+		return all
+	}
+	out := make([]*NodeSnapshot, 0, len(all))
+	for _, n := range all {
+		if n.IsOnline(now, ttl) {
+			out = append(out, n)
+		}
 	}
 	return out
 }

@@ -1,6 +1,10 @@
-{{ define "models.html" }}
+{{ define "models.html" }}{{ template "layout.html" . }}{{ end }}
+{{ define "page_content" }}{{ template "content_models" . }}{{ end }}
+
+{{ define "content_models" }}
 <h1>Models</h1>
 <p class="muted">Now: {{ .Now }}</p>
+
 <table>
   <thead>
     <tr>
@@ -9,6 +13,7 @@
       <th>State</th>
       <th>Loaded since</th>
       <th>Last seen</th>
+      <th>Action</th>
     </tr>
   </thead>
   <tbody>
@@ -19,6 +24,17 @@
       <td>{{ .State }}</td>
       <td>{{ .LoadedSince }}</td>
       <td>{{ .LastSeen }}</td>
+      <td>
+        {{ if eq .State "ready" }}
+          <form method="post" action="/ui/models/unload" style="margin:0">
+            <input type="hidden" name="node_id" value="{{ .NodeID }}"/>
+            <input type="hidden" name="model_id" value="{{ .ModelID }}"/>
+            <button type="submit">Unload</button>
+          </form>
+        {{ else }}
+          <span class="muted">—</span>
+        {{ end }}
+      </td>
     </tr>
   {{ end }}
   </tbody>

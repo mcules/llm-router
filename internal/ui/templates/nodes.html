@@ -1,28 +1,40 @@
-{{ define "nodes.html" }}
+{{ define "nodes.html" }}{{ template "layout.html" . }}{{ end }}
+{{ define "page_content" }}{{ template "content_nodes" . }}{{ end }}
+
+{{ define "content_nodes" }}
 <h1>Nodes</h1>
 <p class="muted">Now: {{ .Now }}</p>
+
 <table>
   <thead>
     <tr>
       <th>Node</th>
+      <th>Status</th>
       <th>Last heartbeat</th>
+      <th>Age</th>
       <th>RAM avail</th>
       <th>RAM total</th>
       <th>Inflight</th>
-      <th>Models</th>
+      <th>EWMA RTT</th>
+      <th>Error rate</th>
+      <th>Data plane</th>
     </tr>
   </thead>
   <tbody>
-  {{ range .Nodes }}
+    {{ range .NodeViews }}
     <tr>
       <td>{{ .NodeID }}</td>
+      <td>{{ if .Online }}online{{ else }}offline{{ end }}</td>
       <td>{{ .LastHeartbeat }}</td>
-      <td>{{ .RAMAvailBytes }}</td>
-      <td>{{ .RAMTotalBytes }}</td>
-      <td>{{ .InflightRequests }}</td>
-      <td>{{ len .Models }}</td>
+      <td>{{ .Age }}</td>
+      <td>{{ .RAMAvail }}</td>
+      <td>{{ .RAMTotal }}</td>
+      <td>{{ .Inflight }}</td>
+      <td>{{ .EWMAms }}</td>
+      <td>{{ .ErrRate }}</td>
+      <td>{{ .DataPlaneURL }}</td>
     </tr>
-  {{ end }}
+    {{ end }}
   </tbody>
 </table>
 {{ end }}

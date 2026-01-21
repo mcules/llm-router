@@ -1,14 +1,16 @@
 services:
-  router-server:
+  server:
     build:
       context: .
       dockerfile: docker/Dockerfile.server
+    container_name: llm-router-server
+    volumes:
+      - ./data:/data
     ports:
-      - "8080:8080"
+      - "8090:8080"
       - "9090:9090"
-    networks:
-      - llmnet
+    networks: [ llmnet ]
 
 networks:
   llmnet:
-    driver: bridge
+    external: true
