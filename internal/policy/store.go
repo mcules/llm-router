@@ -61,7 +61,95 @@ CREATE TABLE IF NOT EXISTS model_policies (
   pinned INTEGER NOT NULL DEFAULT 0,
   priority INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS api_keys (
+  key_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  prefix TEXT NOT NULL,
+  hashed_key TEXT NOT NULL,
+  created_at DATETIME NOT NULL,
+  last_used_at DATETIME
+);
 `)
+	return err
+}
+
+type APIKeyRecord struct {
+	ID         string
+	Name       string
+	Prefix     string
+	HashedKey  string
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+}
+
+func (s *Store) CreateAPIKey(ctx context.Context, record APIKeyRecord) error {
+	if s.db == nil {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO api_keys(key_id, name, prefix, hashed_key, created_at)
+VALUES(?, ?, ?, ?, ?);
+`, record.ID, record.Name, record.Prefix, record.HashedKey, record.CreatedAt)
+	return err
+}
+
+func (s *Store) ListAPIKeys(ctx context.Context) ([]APIKeyRecord, error) {
+	if s.db == nil {
+		return nil, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT key_id, name, prefix, hashed_key, created_at, last_used_at
+FROM api_keys ORDER BY created_at DESC;
+`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []APIKeyRecord
+	for rows.Next() {
+		var r APIKeyRecord
+		if err := rows.Scan(&r.ID, &r.Name, &r.Prefix, &r.HashedKey, &r.CreatedAt, &r.LastUsedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+func (s *Store) GetAPIKey(ctx context.Context, id string) (APIKeyRecord, bool, error) {
+	if s.db == nil {
+		return APIKeyRecord{}, false, nil
+	}
+	row := s.db.QueryRowContext(ctx, `
+SELECT key_id, name, prefix, hashed_key, created_at, last_used_at
+FROM api_keys WHERE key_id=?;
+`, id)
+	var r APIKeyRecord
+	err := row.Scan(&r.ID, &r.Name, &r.Prefix, &r.HashedKey, &r.CreatedAt, &r.LastUsedAt)
+	if err == sql.ErrNoRows {
+		return APIKeyRecord{}, false, nil
+	}
+	if err != nil {
+		return APIKeyRecord{}, false, err
+	}
+	return r, true, nil
+}
+
+func (s *Store) DeleteAPIKey(ctx context.Context, id string) error {
+	if s.db == nil {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, "DELETE FROM api_keys WHERE key_id=?;", id)
+	return err
+}
+
+func (s *Store) UpdateAPIKeyLastUsed(ctx context.Context, id string) error {
+	if s.db == nil {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, "UPDATE api_keys SET last_used_at=? WHERE key_id=?;", time.Now(), id)
 	return err
 }
 

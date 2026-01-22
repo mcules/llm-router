@@ -1,0 +1,58 @@
+{{ define "page_content" }}
+<h3>API Keys</h3>
+
+{{ if .Data.NewKey }}
+<div style="background: #d4edda; color: #155724; padding: 15px; margin-bottom: 20px; border: 1px solid #c3e6cb; border-radius: 4px;">
+    <strong>New API Key Created!</strong><br/>
+    Please copy this key now. You won't be able to see it again.<br/>
+    <code style="background: #fff; padding: 2px 5px; border: 1px solid #ddd; display: block; margin-top: 10px; font-size: 1.2em;">{{ .Data.NewKey }}</code>
+</div>
+{{ end }}
+
+<div style="margin-bottom: 20px;">
+    <form action="/ui/keys/create" method="POST">
+        <input type="text" name="name" placeholder="Key Name (e.g. Production)" required style="padding: 5px; width: 250px;">
+        <button type="submit" style="padding: 5px 15px;">Generate New Key</button>
+    </form>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Prefix</th>
+            <th>Created At</th>
+            <th>Last Used</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{ range .Data.Keys }}
+        <tr>
+            <td>{{ .Name }}</td>
+            <td><code>{{ .Prefix }}...</code></td>
+            <td>{{ .CreatedAt.Format "2006-01-02 15:04:05" }}</td>
+            <td>
+                {{ if .LastUsedAt }}
+                    {{ .LastUsedAt.Format "2006-01-02 15:04:05" }}
+                {{ else }}
+                    <span class="muted">Never</span>
+                {{ end }}
+            </td>
+            <td>
+                <form action="/ui/keys/delete" method="POST" onsubmit="return confirm('Delete this API key?');" style="display:inline;">
+                    <input type="hidden" name="id" value="{{ .ID }}">
+                    <button type="submit" style="color: red; border: none; background: none; cursor: pointer; text-decoration: underline;">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {{ else }}
+        <tr>
+            <td colspan="5" class="muted">No API keys found.</td>
+        </tr>
+        {{ end }}
+    </tbody>
+</table>
+
+{{ end }}
+{{ template "layout.html" . }}

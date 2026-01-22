@@ -29,10 +29,7 @@ func (h *Handler) activity(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	vm := viewModel{
-		Now:      time.Now(),
-		Nodes:    h.Cluster.Snapshot(),
-		Activity: rows,
-	}
+	vm := h.newViewModel("Activity")
+	vm.Activity = rows
 	h.render(w, "activity.html", vm)
 }

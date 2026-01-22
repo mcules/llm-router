@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mcules/llm-router/internal/activity"
+	"github.com/mcules/llm-router/internal/auth"
 	"github.com/mcules/llm-router/internal/metrics"
 	"github.com/mcules/llm-router/internal/policy"
 	"github.com/mcules/llm-router/internal/state"
@@ -24,6 +25,7 @@ type Handler struct {
 	Cluster     *state.ClusterState
 	Commands    CommandSender
 	PolicyStore *policy.Store
+	Auth        *auth.Authenticator
 	Activity    *activity.Log
 	Latency     *metrics.LatencyTracker
 	templateDir string
@@ -31,12 +33,14 @@ type Handler struct {
 }
 
 type viewModel struct {
+	Title     string
 	Now       time.Time
 	Nodes     []*state.NodeSnapshot
 	Models    []modelRow
 	Policies  []PolicyViewRow
 	NodeViews []nodeView
 	Activity  []activityRow
+	Data      any
 }
 
 type nodeView struct {
@@ -66,6 +70,7 @@ func NewHandler(cluster *state.ClusterState, commands CommandSender, store *poli
 		Cluster:     cluster,
 		Commands:    commands,
 		PolicyStore: store,
+		Auth:        auth.NewAuthenticator(store),
 		Activity:    act,
 		Latency:     lat,
 		templateDir: templateDir,
@@ -87,7 +92,7 @@ func NewHandler(cluster *state.ClusterState, commands CommandSender, store *poli
 		},
 	}
 
-	pages := []string{"dashboard.html", "nodes.html", "models.html", "policies.html", "activity.html"}
+	pages := []string{"dashboard.html", "nodes.html", "models.html", "policies.html", "activity.html", "keys.html"}
 	for _, page := range pages {
 		tpl := template.New(page).Funcs(funcMap)
 		tpl, err := tpl.ParseFiles(
@@ -116,6 +121,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/ui/policies/save", h.savePolicy)
 	mux.HandleFunc("/ui/policies/delete", h.deletePolicy)
 	mux.HandleFunc("/ui/policies/upsert", h.upsertPolicy)
+
+	mux.HandleFunc("/ui/keys", h.keys)
+	mux.HandleFunc("/ui/keys/create", h.createKey)
+	mux.HandleFunc("/ui/keys/delete", h.deleteKey)
 
 	mux.HandleFunc("/ui/activity", h.activity)
 
@@ -308,5 +317,13 @@ func (h *Handler) events(w http.ResponseWriter, r *http.Request) {
 			}
 			flusher.Flush()
 		}
+	}
+}
+
+func (h *Handler) newViewModel(title string) viewModel {
+	return viewModel{
+		Title: title,
+		Now:   time.Now(),
+		Nodes: h.Cluster.Snapshot(),
 	}
 }

@@ -13,6 +13,7 @@ import (
 
 	controlplanev1 "github.com/mcules/llm-router/gen/controlplane/v1"
 	"github.com/mcules/llm-router/internal/activity"
+	"github.com/mcules/llm-router/internal/auth"
 	"github.com/mcules/llm-router/internal/control"
 	"github.com/mcules/llm-router/internal/httpx"
 	"github.com/mcules/llm-router/internal/metrics"
@@ -41,6 +42,7 @@ func main() {
 	defer policyStore.Close()
 
 	activityLog := activity.New(300)
+	authenticator := auth.NewAuthenticator(policyStore)
 
 	// Proxy router (API hot path).
 	apiRouter := proxy.NewRouter(cluster, policyStore)
@@ -92,10 +94,17 @@ func main() {
 
 	// API endpoints.
 	modelsHandler := proxy.NewModelsHandler(cluster)
-	mux.HandleFunc("/v1/models", modelsHandler.HandleModels)
-	mux.HandleFunc("/v1/chat/completions", apiRouter.HandleChatCompletions)
-	mux.HandleFunc("/v1/embeddings", apiRouter.HandleEmbeddings)
-	mux.HandleFunc("/v1/completions", apiRouter.HandleCompletions)
+
+	// Create a sub-mux or just wrap the handlers for API.
+	// For simplicity, we wrap the individual handlers if they need auth.
+	apiMux := http.NewServeMux()
+	apiMux.HandleFunc("/v1/models", modelsHandler.HandleModels)
+	apiMux.HandleFunc("/v1/chat/completions", apiRouter.HandleChatCompletions)
+	apiMux.HandleFunc("/v1/embeddings", apiRouter.HandleEmbeddings)
+	apiMux.HandleFunc("/v1/completions", apiRouter.HandleCompletions)
+
+	// Register the API mux into the main mux, wrapped with Auth middleware.
+	mux.Handle("/v1/", authenticator.Middleware(apiMux))
 
 	// Wrap mux with CORS (optional but recommended).
 	handler := httpx.CORS{AllowOrigin: "*"}.Wrap(mux)
