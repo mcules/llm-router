@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mcules/llm-router/internal/metrics"
+	"github.com/mcules/llm-router/internal/policy"
 	"github.com/mcules/llm-router/internal/state"
 )
 
@@ -57,9 +58,11 @@ type Router struct {
 
 	gatesMu sync.Mutex
 	gates   map[string]*modelGate
+
+	Policies *policy.Store
 }
 
-func NewRouter(cluster *state.ClusterState) *Router {
+func NewRouter(cluster *state.ClusterState, policies *policy.Store) *Router {
 	tr := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
 		MaxIdleConns:          200,
@@ -71,6 +74,7 @@ func NewRouter(cluster *state.ClusterState) *Router {
 
 	return &Router{
 		Cluster:        cluster,
+		Policies:       policies,
 		NodeOfflineTTL: 5 * time.Second,
 		Latency:        nil,
 		transport:      tr,

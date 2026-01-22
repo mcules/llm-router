@@ -12,6 +12,8 @@
     th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; }
     .muted { color: #666; }
     .badge { display:inline-block; padding:2px 8px; border:1px solid #ddd; border-radius:999px; }
+    .live-indicator { width: 10px; height: 10px; background: #ccc; border-radius: 50%; display: inline-block; margin-left: 10px; }
+    .live-indicator.active { background: #2ecc71; box-shadow: 0 0 5px #2ecc71; }
   </style>
 </head>
 <body>
@@ -21,9 +23,29 @@
     <a href="/ui/models">Models</a>
     <a href="/ui/policies">Policies</a>
     <a href="/ui/activity">Activity</a>
+    <div id="live-indicator" class="live-indicator" title="Live Updates (SSE)"></div>
   </nav>
   <hr/>
   {{ template "page_content" . }}
+
+  <script>
+    const evtSource = new EventSource("/ui/events");
+    const indicator = document.getElementById("live-indicator");
+    evtSource.onmessage = (event) => {
+        // We could update the DOM here, but for now just show activity
+        indicator.classList.add("active");
+        setTimeout(() => indicator.classList.remove("active"), 300);
+        console.log("Snapshot update", JSON.parse(event.data));
+    };
+    evtSource.addEventListener("snapshot", (event) => {
+        indicator.classList.add("active");
+        setTimeout(() => indicator.classList.remove("active"), 300);
+    });
+    evtSource.onerror = (err) => {
+        console.error("SSE failed:", err);
+        indicator.style.background = "#e74c3c";
+    };
+  </script>
 </body>
 </html>
 {{ end }}

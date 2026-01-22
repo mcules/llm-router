@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -66,7 +67,10 @@ func (r *Router) pickNodeForModel(modelID string) (pickedNode, pickMode, error) 
 			eligible = append(eligible, n)
 		}
 	}
-	best := pickBestByScore(eligible, r.Latency)
+
+	pol, _, _ := r.Policies.GetPolicy(context.Background(), modelID)
+
+	best := pickBestByScore(eligible, r.Latency, pol)
 	if best == nil {
 		return pickedNode{}, pickDirect, errors.New("no nodes available")
 	}

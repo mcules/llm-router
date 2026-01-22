@@ -43,7 +43,7 @@ func main() {
 	activityLog := activity.New(300)
 
 	// Proxy router (API hot path).
-	apiRouter := proxy.NewRouter(cluster)
+	apiRouter := proxy.NewRouter(cluster, policyStore)
 	apiRouter.NodeOfflineTTL = time.Duration(envOrInt("NODE_OFFLINE_SECONDS", 5)) * time.Second
 	apiRouter.Latency = metrics.NewLatencyTracker(0.2)
 

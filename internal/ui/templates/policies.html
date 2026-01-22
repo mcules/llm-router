@@ -43,6 +43,7 @@
       <th>TTL</th>
       <th>Priority</th>
       <th>Pinned</th>
+      <th>Action</th>
     </tr>
   </thead>
   <tbody>
@@ -53,6 +54,12 @@
       <td>{{ .TTLSecs }}</td>
       <td>{{ .Priority }}</td>
       <td>{{ if .Pinned }}yes{{ else }}no{{ end }}</td>
+      <td>
+        <form method="post" action="/ui/policies/delete" style="margin:0">
+          <input type="hidden" name="model_id" value="{{ .ModelID }}"/>
+          <button type="submit" style="color: #e74c3c">Delete</button>
+        </form>
+      </td>
     </tr>
     {{ end }}
   </tbody>

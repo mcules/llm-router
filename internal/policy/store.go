@@ -33,6 +33,14 @@ func (s *Store) Upsert(ctx context.Context, p ModelPolicy) error {
 	return s.UpsertPolicy(ctx, p)
 }
 
+func (s *Store) Delete(ctx context.Context, modelID string) error {
+	if s.db == nil {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, "DELETE FROM model_policies WHERE model_id=?;", modelID)
+	return err
+}
+
 func (s *Store) ListAll(ctx context.Context) ([]ModelPolicy, error) {
 	return s.ListPolicies(ctx)
 }

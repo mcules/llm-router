@@ -25,15 +25,21 @@
       <td>{{ .LoadedSince }}</td>
       <td>{{ .LastSeen }}</td>
       <td>
+        <div style="display:flex; gap:4px">
         {{ if eq .State "ready" }}
           <form method="post" action="/ui/models/unload" style="margin:0">
             <input type="hidden" name="node_id" value="{{ .NodeID }}"/>
             <input type="hidden" name="model_id" value="{{ .ModelID }}"/>
-            <button type="submit">Unload</button>
+            <button type="submit" style="color: #e74c3c">Unload</button>
           </form>
-        {{ else }}
-          <span class="muted">—</span>
         {{ end }}
+        
+        <form method="post" action="/ui/policies/upsert" style="margin:0">
+            <input type="hidden" name="model_id" value="{{ .ModelID }}"/>
+            <input type="hidden" name="pinned" value="true"/>
+            <button type="submit" title="Always keep this model loaded">Pin</button>
+        </form>
+        </div>
       </td>
     </tr>
   {{ end }}

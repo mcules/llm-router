@@ -2,11 +2,14 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mcules/llm-router/internal/policy"
 )
 
 type PolicyViewRow struct {
@@ -36,31 +39,76 @@ func (h *Handler) policies(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "policies.html", vm)
 }
 
+func (h *Handler) deletePolicy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.NotFound(w, r)
+		return
+	}
+	modelID := r.FormValue("model_id")
+	if modelID != "" {
+		_ = h.PolicyStore.Delete(r.Context(), modelID)
+	}
+	http.Redirect(w, r, "/ui/policies", http.StatusFound)
+}
+
+func (h *Handler) upsertPolicy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.NotFound(w, r)
+		return
+	}
+	modelID := r.FormValue("model_id")
+	if modelID == "" {
+		http.Error(w, "missing model_id", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch existing or start new
+	p, _, _ := h.PolicyStore.GetPolicy(r.Context(), modelID)
+
+	if r.FormValue("ram_required_bytes") != "" {
+		p.RAMRequiredBytes = parseUint64Default(r.FormValue("ram_required_bytes"), p.RAMRequiredBytes)
+	}
+	if r.FormValue("ttl_secs") != "" {
+		p.TTLSecs = int64(parseIntDefault(r.FormValue("ttl_secs"), int(p.TTLSecs)))
+	}
+	if r.FormValue("priority") != "" {
+		p.Priority = parseIntDefault(r.FormValue("priority"), p.Priority)
+	}
+	if r.FormValue("pinned") != "" {
+		p.Pinned = r.FormValue("pinned") == "true"
+	}
+
+	_ = h.PolicyStore.Upsert(r.Context(), p)
+
+	http.Redirect(w, r, r.Referer(), http.StatusFound)
+}
+
 func (h *Handler) savePolicy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.NotFound(w, r)
 		return
 	}
 
-	modelID := strings.TrimSpace(r.FormValue("model_id"))
-	if modelID == "" {
-		http.Error(w, "missing model_id", http.StatusBadRequest)
-		return
-	}
-
-	ramRequired := parseUint64Default(r.FormValue("ram_required_bytes"), 0)
-	ttlSecs := parseIntDefault(r.FormValue("ttl_secs"), 0)
-	priority := parseIntDefault(r.FormValue("priority"), 0)
+	modelID := r.FormValue("model_id")
+	ram := parseUint64Default(r.FormValue("ram_required_bytes"), 0)
+	ttl := parseIntDefault(r.FormValue("ttl_secs"), 0)
+	prio := parseIntDefault(r.FormValue("priority"), 0)
 	pinned := r.FormValue("pinned") != ""
 
-	if h.PolicyStore == nil {
-		http.Error(w, "policy store not configured", http.StatusInternalServerError)
+	if modelID == "" {
+		http.Error(w, "model_id is required", http.StatusBadRequest)
 		return
 	}
 
-	// Call PolicyStore.Upsert(ctx, policyStruct) via reflection.
-	if err := callUpsert(r.Context(), h.PolicyStore, modelID, ramRequired, ttlSecs, priority, pinned); err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+	err := h.PolicyStore.Upsert(r.Context(), policy.ModelPolicy{
+		ModelID:          modelID,
+		RAMRequiredBytes: ram,
+		TTLSecs:          int64(ttl),
+		Priority:         prio,
+		Pinned:           pinned,
+	})
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to save policy: %v", err), http.StatusInternalServerError)
 		return
 	}
 

@@ -25,6 +25,7 @@ type Handler struct {
 	Activity    *activity.Log
 	Latency     *metrics.LatencyTracker
 	templateDir string
+	templates   map[string]*template.Template
 }
 
 type viewModel struct {
@@ -59,14 +60,29 @@ type modelRow struct {
 }
 
 func NewHandler(cluster *state.ClusterState, commands CommandSender, store *policy.Store, act *activity.Log, lat *metrics.LatencyTracker, templateDir string) (*Handler, error) {
-	return &Handler{
+	h := &Handler{
 		Cluster:     cluster,
 		Commands:    commands,
 		PolicyStore: store,
 		Activity:    act,
 		Latency:     lat,
 		templateDir: templateDir,
-	}, nil
+		templates:   make(map[string]*template.Template),
+	}
+
+	pages := []string{"dashboard.html", "nodes.html", "models.html", "policies.html", "activity.html"}
+	for _, page := range pages {
+		tpl, err := template.ParseFiles(
+			filepath.Join(templateDir, "layout.html"),
+			filepath.Join(templateDir, page),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("parse template %s: %w", page, err)
+		}
+		h.templates[page] = tpl
+	}
+
+	return h, nil
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -80,6 +96,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 
 	mux.HandleFunc("/ui/policies", h.policies)
 	mux.HandleFunc("/ui/policies/save", h.savePolicy)
+	mux.HandleFunc("/ui/policies/delete", h.deletePolicy)
+	mux.HandleFunc("/ui/policies/upsert", h.upsertPolicy)
 
 	mux.HandleFunc("/ui/activity", h.activity)
 
@@ -91,16 +109,15 @@ func (h *Handler) Register(mux *http.ServeMux) {
 }
 
 func (h *Handler) render(w http.ResponseWriter, page string, vm viewModel) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
-	tpl, err := template.ParseFiles(
-		filepath.Join(h.templateDir, "layout.html"),
-		filepath.Join(h.templateDir, page),
-	)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	tpl, ok := h.templates[page]
+	if !ok {
+		http.Error(w, fmt.Sprintf("template %s not found", page), http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Cache-Control to prevent potential hanging on slow clients or proxies
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 
 	if err := tpl.ExecuteTemplate(w, page, vm); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -229,14 +246,23 @@ func (h *Handler) unloadModel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) events(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	t := time.NewTicker(1 * time.Second)
+	// Send initial pulse
+	_, _ = fmt.Fprintf(w, ": ok\n\n")
+	flusher.Flush()
+
+	t := time.NewTicker(2 * time.Second)
 	defer t.Stop()
-
-	enc := json.NewEncoder(w)
 
 	for {
 		select {
@@ -244,19 +270,16 @@ func (h *Handler) events(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-t.C:
 			snap := h.Cluster.Snapshot()
-			payload := map[string]any{
+			payload, _ := json.Marshal(map[string]any{
 				"ts":    time.Now().UnixMilli(),
 				"nodes": snap,
-			}
+			})
 
-			_, _ = w.Write([]byte("event: snapshot\n"))
-			_, _ = w.Write([]byte("data: "))
-			_ = enc.Encode(payload)
-			_, _ = w.Write([]byte("\n"))
-
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
+			_, err := fmt.Fprintf(w, "event: snapshot\ndata: %s\n\n", payload)
+			if err != nil {
+				return
 			}
+			flusher.Flush()
 		}
 	}
 }
