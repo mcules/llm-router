@@ -68,19 +68,37 @@ CREATE TABLE IF NOT EXISTS api_keys (
   prefix TEXT NOT NULL,
   hashed_key TEXT NOT NULL,
   created_at DATETIME NOT NULL,
-  last_used_at DATETIME
+  last_used_at DATETIME,
+  allowed_nodes TEXT NOT NULL DEFAULT '',
+  allowed_models TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS users (
+  username TEXT PRIMARY KEY,
+  password_hash TEXT NOT NULL,
+  allowed_nodes TEXT NOT NULL DEFAULT '',
+  allowed_models TEXT NOT NULL DEFAULT ''
 );
 `)
 	return err
 }
 
 type APIKeyRecord struct {
-	ID         string
-	Name       string
-	Prefix     string
-	HashedKey  string
-	CreatedAt  time.Time
-	LastUsedAt *time.Time
+	ID            string
+	Name          string
+	Prefix        string
+	HashedKey     string
+	CreatedAt     time.Time
+	LastUsedAt    *time.Time
+	AllowedNodes  string
+	AllowedModels string
+}
+
+type UserRecord struct {
+	Username      string
+	PasswordHash  string
+	AllowedNodes  string
+	AllowedModels string
 }
 
 func (s *Store) CreateAPIKey(ctx context.Context, record APIKeyRecord) error {
@@ -88,9 +106,9 @@ func (s *Store) CreateAPIKey(ctx context.Context, record APIKeyRecord) error {
 		return nil
 	}
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO api_keys(key_id, name, prefix, hashed_key, created_at)
-VALUES(?, ?, ?, ?, ?);
-`, record.ID, record.Name, record.Prefix, record.HashedKey, record.CreatedAt)
+INSERT INTO api_keys(key_id, name, prefix, hashed_key, created_at, allowed_nodes, allowed_models)
+VALUES(?, ?, ?, ?, ?, ?, ?);
+`, record.ID, record.Name, record.Prefix, record.HashedKey, record.CreatedAt, record.AllowedNodes, record.AllowedModels)
 	return err
 }
 
@@ -99,7 +117,7 @@ func (s *Store) ListAPIKeys(ctx context.Context) ([]APIKeyRecord, error) {
 		return nil, nil
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT key_id, name, prefix, hashed_key, created_at, last_used_at
+SELECT key_id, name, prefix, hashed_key, created_at, last_used_at, allowed_nodes, allowed_models
 FROM api_keys ORDER BY created_at DESC;
 `)
 	if err != nil {
@@ -110,7 +128,7 @@ FROM api_keys ORDER BY created_at DESC;
 	var out []APIKeyRecord
 	for rows.Next() {
 		var r APIKeyRecord
-		if err := rows.Scan(&r.ID, &r.Name, &r.Prefix, &r.HashedKey, &r.CreatedAt, &r.LastUsedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.Name, &r.Prefix, &r.HashedKey, &r.CreatedAt, &r.LastUsedAt, &r.AllowedNodes, &r.AllowedModels); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -123,11 +141,11 @@ func (s *Store) GetAPIKey(ctx context.Context, id string) (APIKeyRecord, bool, e
 		return APIKeyRecord{}, false, nil
 	}
 	row := s.db.QueryRowContext(ctx, `
-SELECT key_id, name, prefix, hashed_key, created_at, last_used_at
+SELECT key_id, name, prefix, hashed_key, created_at, last_used_at, allowed_nodes, allowed_models
 FROM api_keys WHERE key_id=?;
 `, id)
 	var r APIKeyRecord
-	err := row.Scan(&r.ID, &r.Name, &r.Prefix, &r.HashedKey, &r.CreatedAt, &r.LastUsedAt)
+	err := row.Scan(&r.ID, &r.Name, &r.Prefix, &r.HashedKey, &r.CreatedAt, &r.LastUsedAt, &r.AllowedNodes, &r.AllowedModels)
 	if err == sql.ErrNoRows {
 		return APIKeyRecord{}, false, nil
 	}
@@ -150,6 +168,79 @@ func (s *Store) UpdateAPIKeyLastUsed(ctx context.Context, id string) error {
 		return nil
 	}
 	_, err := s.db.ExecContext(ctx, "UPDATE api_keys SET last_used_at=? WHERE key_id=?;", time.Now(), id)
+	return err
+}
+
+func (s *Store) CreateUser(ctx context.Context, u UserRecord) error {
+	if s.db == nil {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO users(username, password_hash, allowed_nodes, allowed_models)
+VALUES(?, ?, ?, ?);
+`, u.Username, u.PasswordHash, u.AllowedNodes, u.AllowedModels)
+	return err
+}
+
+func (s *Store) GetUser(ctx context.Context, username string) (UserRecord, bool, error) {
+	if s.db == nil {
+		return UserRecord{}, false, nil
+	}
+	row := s.db.QueryRowContext(ctx, "SELECT username, password_hash, allowed_nodes, allowed_models FROM users WHERE username=?;", username)
+	var u UserRecord
+	err := row.Scan(&u.Username, &u.PasswordHash, &u.AllowedNodes, &u.AllowedModels)
+	if err == sql.ErrNoRows {
+		return UserRecord{}, false, nil
+	}
+	if err != nil {
+		return UserRecord{}, false, err
+	}
+	return u, true, nil
+}
+
+func (s *Store) ListUsers(ctx context.Context) ([]UserRecord, error) {
+	if s.db == nil {
+		return nil, nil
+	}
+	rows, err := s.db.QueryContext(ctx, "SELECT username, password_hash, allowed_nodes, allowed_models FROM users ORDER BY username ASC;")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []UserRecord
+	for rows.Next() {
+		var u UserRecord
+		if err := rows.Scan(&u.Username, &u.PasswordHash, &u.AllowedNodes, &u.AllowedModels); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, nil
+}
+
+func (s *Store) DeleteUser(ctx context.Context, username string) error {
+	if s.db == nil {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, "DELETE FROM users WHERE username=?;", username)
+	return err
+}
+
+func (s *Store) UpdateUser(ctx context.Context, u UserRecord) error {
+	if s.db == nil {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `
+UPDATE users SET allowed_nodes=?, allowed_models=? WHERE username=?;
+`, u.AllowedNodes, u.AllowedModels, u.Username)
+	return err
+}
+
+func (s *Store) UpdateUserPassword(ctx context.Context, username, passwordHash string) error {
+	if s.db == nil {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, "UPDATE users SET password_hash=? WHERE username=?;", passwordHash, username)
 	return err
 }
 

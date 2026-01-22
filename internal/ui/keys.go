@@ -12,13 +12,29 @@ func (h *Handler) keys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Aggregate all known models and nodes for the dropdowns
+	nodes := h.Cluster.Snapshot()
+	allNodes := make(map[string]struct{})
+	allModels := make(map[string]struct{})
+	for _, n := range nodes {
+		allNodes[n.NodeID] = struct{}{}
+		for modelID := range n.Models {
+			allModels[modelID] = struct{}{}
+		}
+	}
+
 	vm := h.newViewModel("API Keys")
+	vm.User = h.getUser(r)
 	vm.Data = struct {
-		Keys   []policy.APIKeyRecord
-		NewKey string
+		Keys      []policy.APIKeyRecord
+		NewKey    string
+		AllNodes  []string
+		AllModels []string
 	}{
-		Keys:   keys,
-		NewKey: r.URL.Query().Get("new_key"),
+		Keys:      keys,
+		NewKey:    r.URL.Query().Get("new_key"),
+		AllNodes:  mapToSortedSlice(allNodes),
+		AllModels: mapToSortedSlice(allModels),
 	}
 
 	h.render(w, "keys.html", vm)
@@ -35,7 +51,10 @@ func (h *Handler) createKey(w http.ResponseWriter, r *http.Request) {
 		name = "Unnamed Key"
 	}
 
-	key, _, err := h.Auth.GenerateKey(r.Context(), name)
+	nodes := r.FormValue("allowed_nodes")
+	models := r.FormValue("allowed_models")
+
+	key, _, err := h.Auth.GenerateKey(r.Context(), name, nodes, models)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

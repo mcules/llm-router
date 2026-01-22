@@ -40,6 +40,7 @@ type viewModel struct {
 	Policies  []PolicyViewRow
 	NodeViews []nodeView
 	Activity  []activityRow
+	User      *policy.UserRecord
 	Data      any
 }
 
@@ -92,7 +93,7 @@ func NewHandler(cluster *state.ClusterState, commands CommandSender, store *poli
 		},
 	}
 
-	pages := []string{"dashboard.html", "nodes.html", "models.html", "policies.html", "activity.html", "keys.html"}
+	pages := []string{"dashboard.html", "nodes.html", "models.html", "policies.html", "activity.html", "keys.html", "login.html", "users.html"}
 	for _, page := range pages {
 		tpl := template.New(page).Funcs(funcMap)
 		tpl, err := tpl.ParseFiles(
@@ -109,24 +110,33 @@ func NewHandler(cluster *state.ClusterState, commands CommandSender, store *poli
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
+	mux.HandleFunc("/ui/login", h.login)
+	mux.HandleFunc("/ui/logout", h.logout)
+
 	// UI root
-	mux.HandleFunc("/ui/", h.dashboard)
+	mux.HandleFunc("/ui/", h.authMiddleware(h.dashboard))
 
-	mux.HandleFunc("/ui/nodes", h.nodes)
-	mux.HandleFunc("/ui/models", h.models)
-	mux.HandleFunc("/ui/models/unload", h.unloadModel)
-	mux.HandleFunc("/ui/events", h.events)
+	mux.HandleFunc("/ui/nodes", h.authMiddleware(h.nodes))
+	mux.HandleFunc("/ui/models", h.authMiddleware(h.models))
+	mux.HandleFunc("/ui/models/unload", h.authMiddleware(h.unloadModel))
+	mux.HandleFunc("/ui/events", h.events) // SSE normally doesn't need auth if pages are protected
 
-	mux.HandleFunc("/ui/policies", h.policies)
-	mux.HandleFunc("/ui/policies/save", h.savePolicy)
-	mux.HandleFunc("/ui/policies/delete", h.deletePolicy)
-	mux.HandleFunc("/ui/policies/upsert", h.upsertPolicy)
+	mux.HandleFunc("/ui/policies", h.authMiddleware(h.policies))
+	mux.HandleFunc("/ui/policies/save", h.authMiddleware(h.savePolicy))
+	mux.HandleFunc("/ui/policies/delete", h.authMiddleware(h.deletePolicy))
+	mux.HandleFunc("/ui/policies/upsert", h.authMiddleware(h.upsertPolicy))
 
-	mux.HandleFunc("/ui/keys", h.keys)
-	mux.HandleFunc("/ui/keys/create", h.createKey)
-	mux.HandleFunc("/ui/keys/delete", h.deleteKey)
+	mux.HandleFunc("/ui/keys", h.authMiddleware(h.keys))
+	mux.HandleFunc("/ui/keys/create", h.authMiddleware(h.createKey))
+	mux.HandleFunc("/ui/keys/delete", h.authMiddleware(h.deleteKey))
 
-	mux.HandleFunc("/ui/activity", h.activity)
+	mux.HandleFunc("/ui/users", h.authMiddleware(h.users))
+	mux.HandleFunc("/ui/users/create", h.authMiddleware(h.createUser))
+	mux.HandleFunc("/ui/users/update", h.authMiddleware(h.updateUser))
+	mux.HandleFunc("/ui/users/delete", h.authMiddleware(h.deleteUser))
+	mux.HandleFunc("/ui/users/password", h.authMiddleware(h.changePassword))
+
+	mux.HandleFunc("/ui/activity", h.authMiddleware(h.activity))
 
 	// Simple health endpoint for the server itself
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -161,18 +171,24 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/ui/", http.StatusFound)
 		return
 	}
-	vm := viewModel{Now: time.Now(), Nodes: h.Cluster.Snapshot()}
+	vm := h.newViewModel("Dashboard")
+	vm.Nodes = h.Cluster.Snapshot()
+	vm.User = h.getUser(r)
 	h.render(w, "dashboard.html", vm)
 }
 
 func (h *Handler) nodes(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	nodes := h.Cluster.Snapshot()
+	user := h.getUser(r)
 
 	ttl := 5 * time.Second
 	views := make([]nodeView, 0, len(nodes))
 
 	for _, n := range nodes {
+		if user != nil && !auth.CheckACL(user.AllowedNodes, n.NodeID) {
+			continue
+		}
 		online := n.IsOnline(now, ttl)
 
 		age := "n/a"
@@ -211,20 +227,25 @@ func (h *Handler) nodes(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	vm := viewModel{
-		Now:       now,
-		Nodes:     nodes,
-		NodeViews: views,
-	}
+	vm := h.newViewModel("Nodes")
+	vm.NodeViews = views
+	vm.User = user
 	h.render(w, "nodes.html", vm)
 }
 
 func (h *Handler) models(w http.ResponseWriter, r *http.Request) {
 	nodes := h.Cluster.Snapshot()
 	rows := make([]modelRow, 0, 256)
+	user := h.getUser(r)
 
 	for _, n := range nodes {
+		if user != nil && !auth.CheckACL(user.AllowedNodes, n.NodeID) {
+			continue
+		}
 		for _, m := range n.Models {
+			if user != nil && !auth.CheckACL(user.AllowedModels, m.ModelID) {
+				continue
+			}
 			rows = append(rows, modelRow{
 				ModelID:     m.ModelID,
 				NodeID:      n.NodeID,
@@ -244,7 +265,9 @@ func (h *Handler) models(w http.ResponseWriter, r *http.Request) {
 		return rows[i].NodeID < rows[j].NodeID
 	})
 
-	vm := viewModel{Now: time.Now(), Nodes: nodes, Models: rows}
+	vm := h.newViewModel("Models")
+	vm.Models = rows
+	vm.User = user
 	h.render(w, "models.html", vm)
 }
 

@@ -1,0 +1,21 @@
+{{ define "page_content" }}
+<div style="max-width: 400px; margin: 50px auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+    <h2>Login</h2>
+    {{ if .Data }}
+    <div style="color: red; margin-bottom: 15px;">{{ .Data }}</div>
+    {{ end }}
+    <form action="/ui/login" method="POST">
+        <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px;">Benutzername</label>
+            <input type="text" name="username" required style="width: 100%; padding: 8px; box-sizing: border-box;">
+        </div>
+        <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px;">Passwort</label>
+            <input type="password" name="password" required style="width: 100%; padding: 8px; box-sizing: border-box;">
+        </div>
+        <button type="submit" style="width: 100%; padding: 10px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer;">Anmelden</button>
+    </form>
+    <p style="margin-top: 15px; font-size: 0.9em; color: #666;">Standard: admin / admin</p>
+</div>
+{{ end }}
+{{ template "layout.html" . }}

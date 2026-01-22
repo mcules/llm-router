@@ -31,5 +31,6 @@ func (h *Handler) activity(w http.ResponseWriter, r *http.Request) {
 
 	vm := h.newViewModel("Activity")
 	vm.Activity = rows
+	vm.User = h.getUser(r)
 	h.render(w, "activity.html", vm)
 }

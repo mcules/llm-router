@@ -1,0 +1,89 @@
+{{ define "page_content" }}
+<h3>User Management</h3>
+
+<div style="margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 4px;">
+    <h4>Add New User</h4>
+    <form action="/ui/users/create" method="POST">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+            <div>
+                <label style="display: block; font-size: 0.8em;">Username</label>
+                <input type="text" name="username" placeholder="Username" required style="padding: 5px;">
+            </div>
+            <div>
+                <label style="display: block; font-size: 0.8em;">Password</label>
+                <input type="password" name="password" placeholder="Password" required style="padding: 5px;">
+            </div>
+            <div>
+                <label style="display: block; font-size: 0.8em;">Allowed Nodes</label>
+                <input type="text" name="allowed_nodes" list="nodes_list" placeholder="*" style="padding: 5px; width: 200px;">
+            </div>
+            <div>
+                <label style="display: block; font-size: 0.8em;">Allowed Models</label>
+                <input type="text" name="allowed_models" list="models_list" placeholder="*" style="padding: 5px; width: 200px;">
+            </div>
+            <button type="submit" style="padding: 5px 15px;">Create User</button>
+        </div>
+    </form>
+</div>
+
+<datalist id="nodes_list">
+    <option value="*">
+    {{ range .Data.AllNodes }}
+    <option value="{{ . }}">
+    {{ end }}
+</datalist>
+
+<datalist id="models_list">
+    <option value="*">
+    {{ range .Data.AllModels }}
+    <option value="{{ . }}">
+    {{ end }}
+</datalist>
+
+<table>
+    <thead>
+        <tr>
+            <th>Username</th>
+            <th>Allowed Nodes</th>
+            <th>Allowed Models</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{ range .Data.Users }}
+        <tr>
+            <td>
+                <strong>{{ .Username }}</strong>
+            </td>
+            <td>
+                <form action="/ui/users/update" method="POST" id="update-form-{{ .Username }}" style="margin:0;">
+                    <input type="hidden" name="username" value="{{ .Username }}">
+                    <input type="text" name="allowed_nodes" list="nodes_list" value="{{ .AllowedNodes }}" placeholder="*" style="padding: 2px; width: 150px;">
+                </form>
+            </td>
+            <td>
+                <input type="text" name="allowed_models" form="update-form-{{ .Username }}" list="models_list" value="{{ .AllowedModels }}" placeholder="*" style="padding: 2px; width: 150px;">
+            </td>
+            <td>
+                <button type="submit" form="update-form-{{ .Username }}" style="color: blue; border: none; background: none; cursor: pointer; text-decoration: underline; padding: 0;">Save</button>
+                |
+                <a href="#" onclick="showPasswordChangeGlobal('{{ .Username }}')" style="font-size: 0.9em;">PW</a>
+                {{ if ne .Username "admin" }}
+                |
+                <form action="/ui/users/delete" method="POST" onsubmit="return confirm('Delete user {{ .Username }}?');" style="display:inline;">
+                    <input type="hidden" name="username" value="{{ .Username }}">
+                    <button type="submit" style="color: red; border: none; background: none; cursor: pointer; text-decoration: underline; padding: 0;">Delete</button>
+                </form>
+                {{ end }}
+            </td>
+        </tr>
+        {{ else }}
+        <tr>
+            <td colspan="4" class="muted">No users found.</td>
+        </tr>
+        {{ end }}
+    </tbody>
+</table>
+
+{{ end }}
+{{ template "layout.html" . }}

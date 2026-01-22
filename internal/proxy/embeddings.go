@@ -22,7 +22,7 @@ func (r *Router) HandleEmbeddings(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	node, mode, err := r.pickNodeForModel(modelID)
+	node, mode, err := r.pickNodeForModel(req, modelID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return

@@ -23,13 +23,45 @@
     <a href="/ui/models">Models</a>
     <a href="/ui/policies">Policies</a>
     <a href="/ui/keys">API Keys</a>
+    <a href="/ui/users">Users</a>
     <a href="/ui/activity">Activity</a>
     <div id="live-indicator" class="live-indicator" title="Live Updates (SSE)"></div>
+    {{ if .User }}
+    <span style="float: right;">
+        Logged in as: <strong>{{ .User.Username }}</strong>
+        | <a href="#" onclick="showPasswordChangeGlobal('{{ .User.Username }}')" style="font-size: 0.9em;">Change PW</a>
+        <a href="/ui/logout" style="margin-left: 10px; color: #e74c3c;">Logout</a>
+    </span>
+    {{ end }}
   </nav>
   <hr/>
   {{ template "page_content" . }}
 
+  <!-- Simple Password Change Modal (Global) -->
+  <div id="passwordModalGlobal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2000;">
+      <div style="background:white; width:300px; margin: 100px auto; padding:20px; border-radius:5px;">
+          <h4>Change Password for <span id="pwTargetUserGlobal"></span></h4>
+          <form action="/ui/users/password" method="POST">
+              <input type="hidden" name="username" id="pwUsernameInputGlobal">
+              <input type="password" name="password" placeholder="New Password" required style="width:100%; padding:5px; margin-bottom:10px;">
+              <div style="display:flex; justify-content: space-between;">
+                  <button type="button" onclick="hidePasswordChangeGlobal()">Cancel</button>
+                  <button type="submit">Change</button>
+              </div>
+          </form>
+      </div>
+  </div>
+
   <script>
+    function showPasswordChangeGlobal(user) {
+        document.getElementById('pwTargetUserGlobal').innerText = user;
+        document.getElementById('pwUsernameInputGlobal').value = user;
+        document.getElementById('passwordModalGlobal').style.display = 'block';
+    }
+    function hidePasswordChangeGlobal() {
+        document.getElementById('passwordModalGlobal').style.display = 'none';
+    }
+
     const evtSource = new EventSource("/ui/events");
     const indicator = document.getElementById("live-indicator");
     evtSource.onmessage = (event) => {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mcules/llm-router/internal/auth"
 	"github.com/mcules/llm-router/internal/state"
 )
 
@@ -36,12 +37,20 @@ func (h *ModelsHandler) HandleModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	authRecord := auth.GetAuthRecord(r)
+
 	// Aggregate model IDs across all nodes.
 	snap := h.Cluster.Snapshot()
 	set := map[string]struct{}{}
 
 	for _, n := range snap {
+		if authRecord != nil && !auth.CheckACL(authRecord.AllowedNodes, n.NodeID) {
+			continue
+		}
 		for modelID := range n.Models {
+			if authRecord != nil && !auth.CheckACL(authRecord.AllowedModels, modelID) {
+				continue
+			}
 			set[modelID] = struct{}{}
 		}
 	}

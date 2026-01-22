@@ -9,18 +9,48 @@
 </div>
 {{ end }}
 
-<div style="margin-bottom: 20px;">
+<div style="margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 4px;">
+    <h4>Generate New Key</h4>
     <form action="/ui/keys/create" method="POST">
-        <input type="text" name="name" placeholder="Key Name (e.g. Production)" required style="padding: 5px; width: 250px;">
-        <button type="submit" style="padding: 5px 15px;">Generate New Key</button>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+            <div>
+                <label style="display: block; font-size: 0.8em;">Name</label>
+                <input type="text" name="name" placeholder="Production" required style="padding: 5px;">
+            </div>
+            <div>
+                <label style="display: block; font-size: 0.8em;">Allowed Nodes</label>
+                <input type="text" name="allowed_nodes" list="nodes_list" placeholder="*" style="padding: 5px; width: 200px;">
+            </div>
+            <div>
+                <label style="display: block; font-size: 0.8em;">Allowed Models</label>
+                <input type="text" name="allowed_models" list="models_list" placeholder="*" style="padding: 5px; width: 200px;">
+            </div>
+            <button type="submit" style="padding: 5px 15px;">Generate Key</button>
+        </div>
     </form>
 </div>
+
+<datalist id="nodes_list">
+    <option value="*">
+    {{ range .Data.AllNodes }}
+    <option value="{{ . }}">
+    {{ end }}
+</datalist>
+
+<datalist id="models_list">
+    <option value="*">
+    {{ range .Data.AllModels }}
+    <option value="{{ . }}">
+    {{ end }}
+</datalist>
 
 <table>
     <thead>
         <tr>
             <th>Name</th>
             <th>Prefix</th>
+            <th>Allowed Nodes</th>
+            <th>Allowed Models</th>
             <th>Created At</th>
             <th>Last Used</th>
             <th>Actions</th>
@@ -31,6 +61,8 @@
         <tr>
             <td>{{ .Name }}</td>
             <td><code>{{ .Prefix }}...</code></td>
+            <td><code>{{ if .AllowedNodes }}{{ .AllowedNodes }}{{ else }}*{{ end }}</code></td>
+            <td><code>{{ if .AllowedModels }}{{ .AllowedModels }}{{ else }}*{{ end }}</code></td>
             <td>{{ .CreatedAt.Format "2006-01-02 15:04:05" }}</td>
             <td>
                 {{ if .LastUsedAt }}

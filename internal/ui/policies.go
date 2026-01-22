@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/mcules/llm-router/internal/auth"
 	"github.com/mcules/llm-router/internal/policy"
 )
 
@@ -36,11 +36,18 @@ func (h *Handler) policies(w http.ResponseWriter, r *http.Request) {
 		return strings.ToLower(rows[i].ModelID) < strings.ToLower(rows[j].ModelID)
 	})
 
-	vm := viewModel{
-		Now:      time.Now(),
-		Nodes:    h.Cluster.Snapshot(),
-		Policies: rows,
+	user := h.getUser(r)
+	filtered := make([]PolicyViewRow, 0, len(rows))
+	for _, row := range rows {
+		if user != nil && !auth.CheckACL(user.AllowedModels, row.ModelID) {
+			continue
+		}
+		filtered = append(filtered, row)
 	}
+
+	vm := h.newViewModel("Policies")
+	vm.Policies = filtered
+	vm.User = user
 	h.render(w, "policies.html", vm)
 }
 

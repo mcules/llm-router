@@ -3,8 +3,10 @@ package proxy
 import (
 	"context"
 	"errors"
+	"net/http"
 	"time"
 
+	"github.com/mcules/llm-router/internal/auth"
 	"github.com/mcules/llm-router/internal/state"
 )
 
@@ -17,11 +19,30 @@ type PlacementResult struct {
 
 // pickNodeForModel is the high-level placement entry point.
 // It is intentionally kept small and deterministic.
-func (r *Router) pickNodeForModel(modelID string) (pickedNode, pickMode, error) {
+func (r *Router) pickNodeForModel(req *http.Request, modelID string) (pickedNode, pickMode, error) {
 	now := time.Now()
+
+	// 0) ACL Check
+	authRecord := auth.GetAuthRecord(req)
+	if authRecord != nil {
+		if !auth.CheckACL(authRecord.AllowedModels, modelID) {
+			return pickedNode{}, pickDirect, errors.New("access to model denied by ACL")
+		}
+	}
 
 	// Only consider online nodes.
 	snap := r.Cluster.SnapshotOnline(now, r.NodeOfflineTTL)
+
+	// Filter nodes by ACL
+	if authRecord != nil {
+		filtered := make([]*state.NodeSnapshot, 0, len(snap))
+		for _, n := range snap {
+			if auth.CheckACL(authRecord.AllowedNodes, n.NodeID) {
+				filtered = append(filtered, n)
+			}
+		}
+		snap = filtered
+	}
 
 	// 1) If any node reports READY for this model, route directly.
 	for _, n := range snap {
