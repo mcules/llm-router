@@ -2,39 +2,82 @@
 {{ define "page_content" }}{{ template "content_nodes" . }}{{ end }}
 
 {{ define "content_nodes" }}
-<h1>Nodes</h1>
-<p class="muted">Now: {{ formatTime .Now }}</p>
+<div class="max-w-7xl mx-auto">
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-bold text-slate-900">Nodes</h2>
+        <div class="text-[10px] text-slate-500">
+            Letztes Update: {{ formatTime .Now }}
+        </div>
+    </div>
 
-<table>
-  <thead>
-    <tr>
-      <th>Node</th>
-      <th>Status</th>
-      <th>Last heartbeat</th>
-      <th>Age</th>
-      <th>RAM avail</th>
-      <th>RAM total</th>
-      <th>Inflight</th>
-      <th>EWMA RTT</th>
-      <th>Error rate</th>
-      <th>Data plane</th>
-    </tr>
-  </thead>
-  <tbody>
-    {{ range .NodeViews }}
-    <tr>
-      <td>{{ .NodeID }}</td>
-      <td>{{ if .Online }}online{{ else }}offline{{ end }}</td>
-      <td>{{ formatTime .LastHeartbeat }}</td>
-      <td>{{ .Age }}</td>
-      <td>{{ formatRAM .RAMAvail }}</td>
-      <td>{{ formatRAM .RAMTotal }}</td>
-      <td>{{ .Inflight }}</td>
-      <td>{{ .EWMAms }}</td>
-      <td>{{ .ErrRate }}</td>
-      <td>{{ .DataPlaneURL }}</td>
-    </tr>
-    {{ end }}
-  </tbody>
-</table>
+    <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-slate-50 border-b border-slate-100">
+                    <tr>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Node</th>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">RAM</th>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Heartbeat</th>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Metrics</th>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Data Plane</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {{ range .NodeViews }}
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="px-4 py-2">
+                            <div class="font-bold text-slate-900 text-sm">{{ .NodeID }}</div>
+                            <div class="text-[10px] text-slate-400">Age: {{ .Age }}</div>
+                        </td>
+                        <td class="px-4 py-2">
+                            {{ if .Online }}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 uppercase">
+                                Online
+                            </span>
+                            {{ else }}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 uppercase">
+                                Offline
+                            </span>
+                            {{ end }}
+                        </td>
+                        <td class="px-4 py-2 text-xs text-slate-600">
+                            <div class="flex items-center gap-1">
+                                <span class="font-bold">{{ formatRAM .RAMAvail }}</span>
+                                <span class="text-slate-300">/</span>
+                                <span>{{ formatRAM .RAMTotal }}</span>
+                            </div>
+                            <div class="w-16 bg-slate-100 rounded-full h-1 mt-1">
+                                <div class="bg-blue-500 h-1 rounded-full" style="width: 45%"></div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-2 text-[10px] text-slate-500">
+                            {{ formatTime .LastHeartbeat }}
+                        </td>
+                        <td class="px-4 py-2">
+                            <div class="flex flex-col gap-0.5 min-w-[80px]">
+                                <div class="text-[10px] flex justify-between">
+                                    <span class="text-slate-400">Inflight:</span>
+                                    <span class="font-mono font-bold">{{ .Inflight }}</span>
+                                </div>
+                                <div class="text-[10px] flex justify-between">
+                                    <span class="text-slate-400">RTT:</span>
+                                    <span class="font-mono font-bold">{{ if gt .EWMAms 0.0 }}{{ printf "%.0f" .EWMAms }}ms{{ else }}n/a{{ end }}</span>
+                                </div>
+                                <div class="text-[10px] flex justify-between">
+                                    <span class="text-slate-400">Error:</span>
+                                    <span class="font-mono font-bold {{ if gt .ErrRate 0.0 }}text-rose-500{{ end }}">{{ printf "%.1f" .ErrRate }}%</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-2">
+                            <code class="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono">{{ .DataPlaneURL }}</code>
+                        </td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 {{ end }}

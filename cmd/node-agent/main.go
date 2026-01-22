@@ -77,8 +77,11 @@ func runOnce(
 		return fmt.Errorf("send hello: %w", err)
 	}
 
-	// Receive loop (commands) in background.
+	// Receive loop (commands and pings) in background.
 	cmdErr := make(chan error, 1)
+	// We use a channel to trigger immediate status updates on Ping
+	pingTrigger := make(chan struct{}, 1)
+
 	go func() {
 		for {
 			in, err := stream.Recv()
@@ -103,6 +106,12 @@ func runOnce(
 				_ = stream.Send(&controlplanev1.NodeMessage{
 					Msg: &controlplanev1.NodeMessage_Ack{Ack: ack},
 				})
+			case *controlplanev1.ServerMessage_Ping:
+				// Trigger immediate status send
+				select {
+				case pingTrigger <- struct{}{}:
+				default:
+				}
 			default:
 				// Ignore.
 			}
@@ -129,9 +138,38 @@ func runOnce(
 	defer tSlots.Stop()
 
 	for {
+		// Helper function to send status
+		sendStatus := func() error {
+			ramTotal, ramAvail, err := readMeminfo(meminfoPath)
+			if err != nil {
+				log.Printf("meminfo: %v", err)
+				return nil // continue loop
+			}
+
+			status := &controlplanev1.NodeStatus{
+				TsUnixMs:          time.Now().UnixMilli(),
+				RamTotalBytes:     ramTotal,
+				RamAvailableBytes: ramAvail,
+				InflightRequests:  inflight,
+				Models:            convertModels(lastModels),
+			}
+
+			if err := stream.Send(&controlplanev1.NodeMessage{
+				Msg: &controlplanev1.NodeMessage_Status{Status: status},
+			}); err != nil {
+				return fmt.Errorf("send status: %w", err)
+			}
+			return nil
+		}
+
 		select {
 		case err := <-cmdErr:
 			return fmt.Errorf("recv loop: %w", err)
+
+		case <-pingTrigger:
+			if err := sendStatus(); err != nil {
+				return err
+			}
 
 		case <-tSlots.C:
 			_ = refreshSlots(ctx, ll, &inflight)
@@ -147,24 +185,8 @@ func runOnce(
 			}
 
 		case <-tHeartbeat.C:
-			ramTotal, ramAvail, err := readMeminfo(meminfoPath)
-			if err != nil {
-				log.Printf("meminfo: %v", err)
-				continue
-			}
-
-			status := &controlplanev1.NodeStatus{
-				TsUnixMs:          time.Now().UnixMilli(),
-				RamTotalBytes:     ramTotal,
-				RamAvailableBytes: ramAvail,
-				InflightRequests:  inflight,
-				Models:            convertModels(lastModels),
-			}
-
-			if err := stream.Send(&controlplanev1.NodeMessage{
-				Msg: &controlplanev1.NodeMessage_Status{Status: status},
-			}); err != nil {
-				return fmt.Errorf("send status: %w", err)
+			if err := sendStatus(); err != nil {
+				return err
 			}
 		}
 	}

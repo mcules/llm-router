@@ -1,84 +1,143 @@
 {{ define "layout.html" }}
 <!doctype html>
-<html>
+<html lang="de">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>LLM Router UI</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 24px; }
-    nav a { margin-right: 12px; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; }
-    .muted { color: #666; }
-    .badge { display:inline-block; padding:2px 8px; border:1px solid #ddd; border-radius:999px; }
-    .live-indicator { width: 10px; height: 10px; background: #ccc; border-radius: 50%; display: inline-block; margin-left: 10px; }
-    .live-indicator.active { background: #2ecc71; box-shadow: 0 0 5px #2ecc71; }
-  </style>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>LLM Router | Control Plane</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .live-indicator { width: 8px; height: 8px; border-radius: 50%; display: inline-block; transition: all 0.3s; }
+        .live-indicator.active { background: #10b981; box-shadow: 0 0 8px #10b981; }
+        .live-indicator.inactive { background: #94a3b8; }
+        .live-indicator.error { background: #ef4444; }
+    </style>
 </head>
-<body>
-  <nav>
-    <a href="/ui/">Dashboard</a>
-    <a href="/ui/nodes">Nodes</a>
-    <a href="/ui/models">Models</a>
-    <a href="/ui/policies">Policies</a>
-    <a href="/ui/keys">API Keys</a>
-    <a href="/ui/users">Users</a>
-    <a href="/ui/activity">Activity</a>
-    <div id="live-indicator" class="live-indicator" title="Live Updates (SSE)"></div>
-    {{ if .User }}
-    <span style="float: right;">
-        Logged in as: <strong>{{ .User.Username }}</strong>
-        | <a href="#" onclick="showPasswordChangeGlobal('{{ .User.Username }}')" style="font-size: 0.9em;">Change PW</a>
-        <a href="/ui/logout" style="margin-left: 10px; color: #e74c3c;">Logout</a>
-    </span>
-    {{ end }}
-  </nav>
-  <hr/>
-  {{ template "page_content" . }}
+<body class="bg-slate-50 text-slate-900 flex min-h-screen">
+    <!-- Sidebar -->
+    <aside class="w-60 bg-slate-900 text-white flex-shrink-0 flex flex-col">
+        <div class="p-4">
+            <h1 class="text-lg font-bold flex items-center gap-2">
+                <i class="fas fa-network-wired text-blue-400"></i>
+                LLM Router
+            </h1>
+        </div>
+        <nav class="flex-1 px-3 space-y-0.5">
+            <a href="/ui/" class="flex items-center gap-3 px-3 py-1.5 rounded-md hover:bg-slate-800 transition text-slate-300 hover:text-white text-sm">
+                <i class="fas fa-chart-line w-4"></i> Dashboard
+            </a>
+            <a href="/ui/nodes" class="flex items-center gap-3 px-3 py-1.5 rounded-md hover:bg-slate-800 transition text-slate-300 hover:text-white text-sm">
+                <i class="fas fa-server w-4"></i> Nodes
+            </a>
+            <a href="/ui/models" class="flex items-center gap-3 px-3 py-1.5 rounded-md hover:bg-slate-800 transition text-slate-300 hover:text-white text-sm">
+                <i class="fas fa-brain w-4"></i> Models
+            </a>
+            <a href="/ui/policies" class="flex items-center gap-3 px-3 py-1.5 rounded-md hover:bg-slate-800 transition text-slate-300 hover:text-white text-sm">
+                <i class="fas fa-shield-halved w-4"></i> Policies
+            </a>
+            <a href="/ui/keys" class="flex items-center gap-3 px-3 py-1.5 rounded-md hover:bg-slate-800 transition text-slate-300 hover:text-white text-sm">
+                <i class="fas fa-key w-4"></i> API Keys
+            </a>
+            <a href="/ui/users" class="flex items-center gap-3 px-3 py-1.5 rounded-md hover:bg-slate-800 transition text-slate-300 hover:text-white text-sm">
+                <i class="fas fa-users w-4"></i> Users
+            </a>
+            <a href="/ui/activity" class="flex items-center gap-3 px-3 py-1.5 rounded-md hover:bg-slate-800 transition text-slate-300 hover:text-white text-sm">
+                <i class="fas fa-list-ul w-4"></i> Activity
+            </a>
+        </nav>
+        <div class="p-3 border-t border-slate-800">
+            <div id="live-indicator-container" class="flex items-center gap-2 text-[10px] text-slate-400 mb-3 px-3">
+                <div id="live-indicator" class="live-indicator inactive" title="Live Updates (SSE)"></div>
+                <span>Live Feed</span>
+            </div>
+            {{ if .User }}
+            <div class="px-3 py-2 bg-slate-800 rounded-lg">
+                <div class="text-[10px] text-slate-400 mb-1">Eingeloggt als</div>
+                <div class="text-sm font-medium truncate mb-2">{{ .User.Username }}</div>
+                <div class="flex justify-between items-center text-[10px]">
+                    <button onclick="showPasswordChangeGlobal('{{ .User.Username }}')" class="text-blue-400 hover:text-blue-300">
+                        Passwort
+                    </button>
+                    <a href="/ui/logout" class="text-rose-400 hover:text-rose-300">Logout</a>
+                </div>
+            </div>
+            {{ end }}
+        </div>
+    </aside>
 
-  <!-- Simple Password Change Modal (Global) -->
-  <div id="passwordModalGlobal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2000;">
-      <div style="background:white; width:300px; margin: 100px auto; padding:20px; border-radius:5px;">
-          <h4>Change Password for <span id="pwTargetUserGlobal"></span></h4>
-          <form action="/ui/users/password" method="POST">
-              <input type="hidden" name="username" id="pwUsernameInputGlobal">
-              <input type="password" name="password" placeholder="New Password" required style="width:100%; padding:5px; margin-bottom:10px;">
-              <div style="display:flex; justify-content: space-between;">
-                  <button type="button" onclick="hidePasswordChangeGlobal()">Cancel</button>
-                  <button type="submit">Change</button>
-              </div>
-          </form>
-      </div>
-  </div>
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col min-w-0">
+        <header class="bg-white border-bottom border-slate-200 h-12 flex items-center px-6 shadow-sm">
+             <div class="text-xs text-slate-500">
+                 {{ if .Now }}<i class="far fa-clock mr-1"></i> {{ formatTime .Now }}{{ end }}
+             </div>
+        </header>
+        <div class="p-6 overflow-y-auto">
+            {{ template "page_content" . }}
+        </div>
+    </main>
 
-  <script>
-    function showPasswordChangeGlobal(user) {
-        document.getElementById('pwTargetUserGlobal').innerText = user;
-        document.getElementById('pwUsernameInputGlobal').value = user;
-        document.getElementById('passwordModalGlobal').style.display = 'block';
-    }
-    function hidePasswordChangeGlobal() {
-        document.getElementById('passwordModalGlobal').style.display = 'none';
-    }
+    <!-- Password Change Modal -->
+    <div id="passwordModalGlobal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+            <div class="p-6 border-b border-slate-100">
+                <h3 class="text-lg font-bold">Passwort ändern für <span id="pwTargetUserGlobal" class="text-blue-600"></span></h3>
+            </div>
+            <form action="/ui/users/password" method="POST" class="p-6">
+                <input type="hidden" name="username" id="pwUsernameInputGlobal">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Neues Passwort</label>
+                    <input type="password" name="password" placeholder="Passwort eingeben" required 
+                           class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition">
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="hidePasswordChangeGlobal()" 
+                            class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition">Abbrechen</button>
+                    <button type="submit" 
+                            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium">Ändern</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
-    const evtSource = new EventSource("/ui/events");
-    const indicator = document.getElementById("live-indicator");
-    evtSource.onmessage = (event) => {
-        // We could update the DOM here, but for now just show activity
-        indicator.classList.add("active");
-        setTimeout(() => indicator.classList.remove("active"), 300);
-        console.log("Snapshot update", JSON.parse(event.data));
-    };
-    evtSource.addEventListener("snapshot", (event) => {
-        indicator.classList.add("active");
-        setTimeout(() => indicator.classList.remove("active"), 300);
-    });
-    evtSource.onerror = (err) => {
-        console.error("SSE failed:", err);
-        indicator.style.background = "#e74c3c";
-    };
-  </script>
+    <script>
+        function showPasswordChangeGlobal(user) {
+            document.getElementById('pwTargetUserGlobal').innerText = user;
+            document.getElementById('pwUsernameInputGlobal').value = user;
+            document.getElementById('passwordModalGlobal').classList.remove('hidden');
+        }
+        function hidePasswordChangeGlobal() {
+            document.getElementById('passwordModalGlobal').classList.add('hidden');
+        }
+
+        const evtSource = new EventSource("/ui/events");
+        const indicator = document.getElementById("live-indicator");
+        
+        evtSource.onopen = () => {
+            indicator.classList.remove('inactive', 'error');
+            indicator.classList.add('active');
+            setTimeout(() => indicator.classList.remove('active'), 500);
+        };
+
+        evtSource.onmessage = (event) => {
+            indicator.classList.add("active");
+            setTimeout(() => indicator.classList.remove("active"), 300);
+        };
+        
+        evtSource.addEventListener("snapshot", (event) => {
+            indicator.classList.add("active");
+            setTimeout(() => indicator.classList.remove("active"), 300);
+        });
+        
+        evtSource.onerror = (err) => {
+            console.error("SSE failed:", err);
+            indicator.classList.remove('active', 'inactive');
+            indicator.classList.add("error");
+        };
+    </script>
 </body>
 </html>
 {{ end }}

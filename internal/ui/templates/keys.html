@@ -1,90 +1,116 @@
 {{ define "page_content" }}
-<h3>API Keys</h3>
+<div class="max-w-7xl mx-auto">
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-bold text-slate-900">API Keys</h2>
+    </div>
 
-{{ if .Data.NewKey }}
-<div style="background: #d4edda; color: #155724; padding: 15px; margin-bottom: 20px; border: 1px solid #c3e6cb; border-radius: 4px;">
-    <strong>New API Key Created!</strong><br/>
-    Please copy this key now. You won't be able to see it again.<br/>
-    <code style="background: #fff; padding: 2px 5px; border: 1px solid #ddd; display: block; margin-top: 10px; font-size: 1.2em;">{{ .Data.NewKey }}</code>
-</div>
-{{ end }}
-
-<div style="margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 4px;">
-    <h4>Generate New Key</h4>
-    <form action="/ui/keys/create" method="POST">
-        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
-            <div>
-                <label style="display: block; font-size: 0.8em;">Name</label>
-                <input type="text" name="name" placeholder="Production" required style="padding: 5px;">
+    {{ if .Data.NewKey }}
+    <div class="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl shadow-sm relative overflow-hidden">
+        <div class="flex items-start gap-3">
+            <div class="bg-emerald-100 p-1.5 rounded text-emerald-600">
+                <i class="fas fa-check-circle text-lg"></i>
             </div>
             <div>
-                <label style="display: block; font-size: 0.8em;">Allowed Nodes</label>
-                <input type="text" name="allowed_nodes" list="nodes_list" placeholder="*" style="padding: 5px; width: 200px;">
+                <h4 class="font-bold text-sm mb-0.5">Neuer API Key erstellt!</h4>
+                <p class="text-[10px] mb-2">Bitte kopieren Sie diesen Schlüssel jetzt. Er wird nicht erneut angezeigt.</p>
+                <div class="flex items-center gap-2">
+                    <code class="bg-white px-3 py-2 rounded border border-emerald-200 font-mono text-sm block w-full select-all shadow-inner">
+                        {{ .Data.NewKey }}
+                    </code>
+                    <button onclick="navigator.clipboard.writeText('{{ .Data.NewKey }}')" class="bg-white p-2 rounded border border-emerald-200 hover:bg-emerald-100 transition shadow-sm" title="Kopieren">
+                        <i class="fas fa-copy text-sm"></i>
+                    </button>
+                </div>
             </div>
-            <div>
-                <label style="display: block; font-size: 0.8em;">Allowed Models</label>
-                <input type="text" name="allowed_models" list="models_list" placeholder="*" style="padding: 5px; width: 200px;">
-            </div>
-            <button type="submit" style="padding: 5px 15px;">Generate Key</button>
         </div>
-    </form>
+    </div>
+    {{ end }}
+
+    <!-- Generate Form -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden mb-6">
+        <div class="px-4 py-2 border-b border-slate-100 bg-slate-50">
+            <h3 class="font-bold text-sm text-slate-800">Generieren</h3>
+        </div>
+        <form action="/ui/keys/create" method="POST" class="p-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Name / Beschreibung</label>
+                    <input type="text" name="name" placeholder="z.B. Frontend-App" required 
+                           class="w-full px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 transition bg-white text-sm">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Erlaubte Nodes</label>
+                    <input type="text" name="allowed_nodes" list="nodes_list" placeholder="*" 
+                           class="w-full px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 transition bg-white text-sm font-mono">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Erlaubte Modelle</label>
+                    <input type="text" name="allowed_models" list="models_list" placeholder="*" 
+                           class="w-full px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 transition bg-white text-sm font-mono">
+                </div>
+            </div>
+            <div class="mt-4 flex justify-end">
+                <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700 transition font-bold shadow-sm flex items-center gap-2">
+                    <i class="fas fa-plus text-xs"></i> Generieren
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Keys Table -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-slate-50 border-b border-slate-100">
+                    <tr>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Name</th>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Prefix</th>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">ACL</th>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Verwendung</th>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Aktionen</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {{ range .Data.Keys }}
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="px-4 py-2 font-bold text-slate-900 text-sm">{{ .Name }}</td>
+                        <td class="px-4 py-2">
+                            <code class="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono">{{ .Prefix }}...</code>
+                        </td>
+                        <td class="px-4 py-2">
+                            <div class="text-[10px] space-y-0.5">
+                                <div class="flex items-center gap-1.5 text-slate-500">
+                                    <span class="w-10">Nodes:</span>
+                                    <span class="bg-blue-50 text-blue-700 px-1.5 rounded font-mono">{{ if .AllowedNodes }}{{ .AllowedNodes }}{{ else }}*{{ end }}</span>
+                                </div>
+                                <div class="flex items-center gap-1.5 text-slate-500">
+                                    <span class="w-10">Models:</span>
+                                    <span class="bg-purple-50 text-purple-700 px-1.5 rounded font-mono">{{ if .AllowedModels }}{{ .AllowedModels }}{{ else }}*{{ end }}</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-2">
+                            <div class="text-[10px] text-slate-500">C: {{ .CreatedAt.Format "02.01.2006" }}</div>
+                            <div class="text-[10px] text-slate-400">U: {{ if .LastUsedAt }}{{ .LastUsedAt.Format "02.01.06 15:04" }}{{ else }}Nie{{ end }}</div>
+                        </td>
+                        <td class="px-4 py-2 text-right">
+                            <form action="/ui/keys/delete" method="POST" onsubmit="return confirm('Löschen?');" class="inline">
+                                <input type="hidden" name="id" value="{{ .ID }}">
+                                <button type="submit" class="p-1.5 text-rose-600 hover:bg-rose-50 rounded transition" title="Löschen">
+                                    <i class="fas fa-trash-can text-xs"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {{ else }}
+                    <tr>
+                        <td colspan="5" class="px-4 py-8 text-center text-slate-400 italic text-sm">Keine API Keys vorhanden.</td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
-
-<datalist id="nodes_list">
-    <option value="*">
-    {{ range .Data.AllNodes }}
-    <option value="{{ . }}">
-    {{ end }}
-</datalist>
-
-<datalist id="models_list">
-    <option value="*">
-    {{ range .Data.AllModels }}
-    <option value="{{ . }}">
-    {{ end }}
-</datalist>
-
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Prefix</th>
-            <th>Allowed Nodes</th>
-            <th>Allowed Models</th>
-            <th>Created At</th>
-            <th>Last Used</th>
-            <th>Actions</th>
-        </tr>
-    </thead>
-    <tbody>
-        {{ range .Data.Keys }}
-        <tr>
-            <td>{{ .Name }}</td>
-            <td><code>{{ .Prefix }}...</code></td>
-            <td><code>{{ if .AllowedNodes }}{{ .AllowedNodes }}{{ else }}*{{ end }}</code></td>
-            <td><code>{{ if .AllowedModels }}{{ .AllowedModels }}{{ else }}*{{ end }}</code></td>
-            <td>{{ .CreatedAt.Format "2006-01-02 15:04:05" }}</td>
-            <td>
-                {{ if .LastUsedAt }}
-                    {{ .LastUsedAt.Format "2006-01-02 15:04:05" }}
-                {{ else }}
-                    <span class="muted">Never</span>
-                {{ end }}
-            </td>
-            <td>
-                <form action="/ui/keys/delete" method="POST" onsubmit="return confirm('Delete this API key?');" style="display:inline;">
-                    <input type="hidden" name="id" value="{{ .ID }}">
-                    <button type="submit" style="color: red; border: none; background: none; cursor: pointer; text-decoration: underline;">Delete</button>
-                </form>
-            </td>
-        </tr>
-        {{ else }}
-        <tr>
-            <td colspan="5" class="muted">No API keys found.</td>
-        </tr>
-        {{ end }}
-    </tbody>
-</table>
-
 {{ end }}
 {{ template "layout.html" . }}

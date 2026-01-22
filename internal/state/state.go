@@ -1,6 +1,7 @@
 package state
 
 import (
+	"log"
 	"sync"
 	"time"
 )
@@ -79,6 +80,7 @@ func (cs *ClusterState) UpdateNodeStatus(nodeID string, ramTotal, ramAvail uint6
 
 	n, ok := cs.nodes[nodeID]
 	if !ok {
+		// This should ideally not happen if Hello was sent, but we handle it.
 		n = &NodeSnapshot{
 			NodeID: nodeID,
 			Models: map[string]ModelResidency{},
@@ -90,6 +92,7 @@ func (cs *ClusterState) UpdateNodeStatus(nodeID string, ramTotal, ramAvail uint6
 	n.InflightRequests = inflight
 	n.LastHeartbeat = time.Now()
 	n.Models = models
+	log.Printf("DEBUG: ClusterState updated node %s, last_heartbeat=%v, total nodes: %d", nodeID, n.LastHeartbeat.Format("15:04:05.000"), len(cs.nodes))
 }
 
 func (cs *ClusterState) Snapshot() []*NodeSnapshot {

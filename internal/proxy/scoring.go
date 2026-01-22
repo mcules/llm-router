@@ -52,6 +52,16 @@ func pickBestByScore(nodes []*state.NodeSnapshot, lat *metrics.LatencyTracker, p
 		if best == nil || s > bestScore {
 			best = n
 			bestScore = s
+		} else if s == bestScore && best != nil {
+			// Tie-breaker: prefer node with fewer inflight requests
+			if n.InflightRequests < best.InflightRequests {
+				best = n
+			} else if n.InflightRequests == best.InflightRequests {
+				// Second tie-breaker: stable but fair based on NodeID
+				if n.NodeID < best.NodeID {
+					best = n
+				}
+			}
 		}
 	}
 	return best

@@ -44,13 +44,22 @@ func (r *Router) pickNodeForModel(req *http.Request, modelID string) (pickedNode
 		snap = filtered
 	}
 
-	// 1) If any node reports READY for this model, route directly.
+	// 1) If any node reports READY for this model, route to the best one among them.
+	var readyNodes []*state.NodeSnapshot
 	for _, n := range snap {
 		if n.DataPlaneURL == "" {
 			continue
 		}
 		if m, ok := n.Models[modelID]; ok && m.State == state.ModelReady {
-			return pickedNode{NodeID: n.NodeID, DataPlaneURL: n.DataPlaneURL}, pickDirect, nil
+			readyNodes = append(readyNodes, n)
+		}
+	}
+
+	if len(readyNodes) > 0 {
+		pol, _, _ := r.Policies.GetPolicy(context.Background(), modelID)
+		best := pickBestByScore(readyNodes, r.Latency, pol)
+		if best != nil {
+			return pickedNode{NodeID: best.NodeID, DataPlaneURL: best.DataPlaneURL}, pickDirect, nil
 		}
 	}
 
@@ -58,17 +67,6 @@ func (r *Router) pickNodeForModel(req *http.Request, modelID string) (pickedNode
 	g := r.getGate(modelID)
 	g.mu.Lock()
 	defer g.mu.Unlock()
-
-	// If we have a known ready node, try it.
-	if g.readyNode != "" {
-		for _, n := range snap {
-			if n.NodeID == g.readyNode && n.DataPlaneURL != "" {
-				return pickedNode{NodeID: n.NodeID, DataPlaneURL: n.DataPlaneURL}, pickDirect, nil
-			}
-		}
-		// Ready node went away.
-		g.readyNode = ""
-	}
 
 	// If a loader is in progress, callers can wait.
 	if g.loadingNode != "" {

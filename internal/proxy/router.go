@@ -31,7 +31,6 @@ type pickedNode struct {
 
 type modelGate struct {
 	mu          sync.Mutex
-	readyNode   string
 	loadingNode string
 	notifyCh    chan struct{} // closed when model becomes READY somewhere
 }
@@ -102,7 +101,6 @@ func (r *Router) NotifyModelReady(nodeID, modelID string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	g.readyNode = nodeID
 	g.loadingNode = ""
 
 	// Wake waiters.

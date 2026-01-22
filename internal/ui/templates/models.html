@@ -2,47 +2,90 @@
 {{ define "page_content" }}{{ template "content_models" . }}{{ end }}
 
 {{ define "content_models" }}
-<h1>Models</h1>
-<p class="muted">Now: {{ formatTime .Now }}</p>
+<div class="max-w-7xl mx-auto">
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-bold text-slate-900">Modelle</h2>
+    </div>
 
-<table>
-  <thead>
-    <tr>
-      <th>Model</th>
-      <th>Node</th>
-      <th>State</th>
-      <th>Loaded since</th>
-      <th>Last seen</th>
-      <th>Action</th>
-    </tr>
-  </thead>
-  <tbody>
-  {{ range .Models }}
-    <tr>
-      <td>{{ .ModelID }}</td>
-      <td>{{ .NodeID }}</td>
-      <td>{{ .State }}</td>
-      <td>{{ formatTime .LoadedSince }}</td>
-      <td>{{ formatTime .LastSeen }}</td>
-      <td>
-        <div style="display:flex; gap:4px">
-        {{ if eq .State "ready" }}
-          <form method="post" action="/ui/models/unload" style="margin:0">
-            <input type="hidden" name="node_id" value="{{ .NodeID }}"/>
-            <input type="hidden" name="model_id" value="{{ .ModelID }}"/>
-            <button type="submit" style="color: #e74c3c">Unload</button>
-          </form>
-        {{ end }}
-        
-        <form method="post" action="/ui/policies/upsert" style="margin:0">
-            <input type="hidden" name="model_id" value="{{ .ModelID }}"/>
-            <input type="hidden" name="pinned" value="true"/>
-            <button type="submit" title="Always keep this model loaded">Pin</button>
-        </form>
+    <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-slate-50 border-b border-slate-100">
+                    <tr>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-1/4">Modell</th>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Verfügbare Nodes & Status</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                {{ range $group := .Models }}
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="px-4 py-3 align-top">
+                            <div class="font-bold text-slate-900 flex items-center gap-2 text-sm">
+                                <i class="fas fa-brain text-blue-500"></i>
+                                {{ .ModelID }}
+                            </div>
+                            <div class="text-[10px] text-slate-400 mt-1">{{ len .Nodes }} Node(s) verfügbar</div>
+                        </td>
+                        <td class="px-4 py-2">
+                            <div class="space-y-1.5">
+                                {{ range .Nodes }}
+                                <div class="flex items-center justify-between bg-slate-50/50 p-2 rounded-lg border border-slate-100">
+                                    <div class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+                                        <div>
+                                            <div class="text-[9px] font-bold text-slate-400 uppercase leading-tight">Node</div>
+                                            <div class="font-mono text-xs">{{ .NodeID }}</div>
+                                        </div>
+                                        <div>
+                                            <div class="text-[9px] font-bold text-slate-400 uppercase leading-tight">Status</div>
+                                            {{ if eq .State "ready" }}
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800">
+                                                READY
+                                            </span>
+                                            {{ else if eq .State "loading" }}
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-800 animate-pulse">
+                                                LOADING
+                                            </span>
+                                            {{ else }}
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-200 text-slate-700">
+                                                {{ .State | printf "%s" | upper }}
+                                            </span>
+                                            {{ end }}
+                                        </div>
+                                        <div>
+                                            <div class="text-[9px] font-bold text-slate-400 uppercase leading-tight">Zeitstempel</div>
+                                            <div class="text-[9px] text-slate-500 leading-tight">G: {{ formatTime .LoadedSince }}</div>
+                                            <div class="text-[9px] text-slate-400 leading-tight">L: {{ formatTime .LastSeen }}</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="flex gap-0.5 ml-2">
+                                        {{ if eq .State "ready" }}
+                                        <form method="post" action="/ui/models/unload" class="inline">
+                                            <input type="hidden" name="node_id" value="{{ .NodeID }}"/>
+                                            <input type="hidden" name="model_id" value="{{ $group.ModelID }}"/>
+                                            <button type="submit" class="p-1.5 text-rose-600 hover:bg-rose-100 rounded transition" title="Unload">
+                                                <i class="fas fa-power-off text-xs"></i>
+                                            </button>
+                                        </form>
+                                        {{ end }}
+                                        
+                                        <form method="post" action="/ui/policies/upsert" class="inline">
+                                            <input type="hidden" name="model_id" value="{{ $group.ModelID }}"/>
+                                            <input type="hidden" name="pinned" value="true"/>
+                                            <button type="submit" class="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition" title="Pin Model">
+                                                <i class="fas fa-thumbtack text-xs"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                                {{ end }}
+                            </div>
+                        </td>
+                    </tr>
+                {{ end }}
+                </tbody>
+            </table>
         </div>
-      </td>
-    </tr>
-  {{ end }}
-  </tbody>
-</table>
+    </div>
+</div>
 {{ end }}

@@ -2,66 +2,98 @@
 {{ define "page_content" }}{{ template "content_policies" . }}{{ end }}
 
 {{ define "content_policies" }}
-<h1>Policies</h1>
-<p class="muted">Now: {{ formatTime .Now }}</p>
+<div class="max-w-7xl mx-auto">
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-bold text-slate-900">Richtlinien (Policies)</h2>
+    </div>
 
-<h2>Add / Update Policy</h2>
-<form method="post" action="/ui/policies/save">
-  <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
-    <div>
-      <label>Model ID</label><br/>
-      <input name="model_id" style="min-width:320px" required />
-    </div>
-    <div>
-      <label>RAM Required (bytes)</label><br/>
-      <input name="ram_required_bytes" />
-    </div>
-    <div>
-      <label>TTL (secs)</label><br/>
-      <input name="ttl_secs" />
-    </div>
-    <div>
-      <label>Priority</label><br/>
-      <input name="priority" />
-    </div>
-    <div>
-      <label>Pinned</label><br/>
-      <input type="checkbox" name="pinned" />
-    </div>
-    <div>
-      <button type="submit">Save</button>
-    </div>
-  </div>
-</form>
-
-<h2>Existing Policies</h2>
-<table>
-  <thead>
-    <tr>
-      <th>Model</th>
-      <th>RAM Required</th>
-      <th>TTL</th>
-      <th>Priority</th>
-      <th>Pinned</th>
-      <th>Action</th>
-    </tr>
-  </thead>
-  <tbody>
-    {{ range .Policies }}
-    <tr>
-      <td>{{ .ModelID }}</td>
-      <td>{{ formatRAM .RAMRequiredBytes }}</td>
-      <td>{{ .TTLSecs }}</td>
-      <td>{{ .Priority }}</td>
-      <td>{{ if .Pinned }}yes{{ else }}no{{ end }}</td>
-      <td>
-        <form method="post" action="/ui/policies/delete" style="margin:0">
-          <input type="hidden" name="model_id" value="{{ .ModelID }}"/>
-          <button type="submit" style="color: #e74c3c">Delete</button>
+    <!-- Add/Update Form -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden mb-6">
+        <div class="px-4 py-2 border-b border-slate-100 bg-slate-50">
+            <h3 class="font-bold text-sm text-slate-800">Neu / Aktualisieren</h3>
+        </div>
+        <form method="post" action="/ui/policies/save" class="p-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                <div class="lg:col-span-2">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Modell ID</label>
+                    <input name="model_id" required placeholder="z.B. llama3:8b"
+                           class="w-full px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 transition bg-white text-sm font-mono">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">RAM (Bytes)</label>
+                    <input name="ram_required_bytes" placeholder="Opt."
+                           class="w-full px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 transition bg-white text-sm font-mono">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">TTL (Sek.)</label>
+                    <input name="ttl_secs" placeholder="Opt."
+                           class="w-full px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 transition bg-white text-sm font-mono">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Prio</label>
+                    <input name="priority" placeholder="0"
+                           class="w-full px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 transition bg-white text-sm font-mono">
+                </div>
+            </div>
+            <div class="mt-4 flex items-center justify-between">
+                <label class="flex items-center gap-2 cursor-pointer group">
+                    <input type="checkbox" name="pinned" class="w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500">
+                    <span class="text-xs text-slate-600 group-hover:text-slate-900 transition">Pinned</span>
+                </label>
+                <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700 transition font-bold shadow-sm">
+                    Speichern
+                </button>
+            </div>
         </form>
-      </td>
-    </tr>
-    {{ end }}
-  </tbody>
-</table>
+    </div>
+
+    <!-- Existing Policies -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        <div class="px-4 py-2 border-b border-slate-100 bg-slate-50">
+            <h3 class="font-bold text-sm text-slate-800">Aktive Richtlinien</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-slate-50 border-b border-slate-100">
+                    <tr>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Modell</th>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">RAM</th>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">TTL</th>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Pinned</th>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Aktionen</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {{ range .Policies }}
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="px-4 py-2 font-bold text-slate-900 text-sm font-mono">{{ .ModelID }}</td>
+                        <td class="px-4 py-2 text-xs text-slate-600">{{ formatRAM .RAMRequiredBytes }}</td>
+                        <td class="px-4 py-2 text-xs text-slate-600">{{ .TTLSecs }}s</td>
+                        <td class="px-4 py-2 text-center text-sm">
+                            {{ if .Pinned }}
+                            <i class="fas fa-thumbtack text-blue-500" title="Pinned"></i>
+                            {{ else }}
+                            <span class="text-slate-300 text-xs">-</span>
+                            {{ end }}
+                        </td>
+                        <td class="px-4 py-2 text-right">
+                            <form method="post" action="/ui/policies/delete" class="inline">
+                                <input type="hidden" name="model_id" value="{{ .ModelID }}"/>
+                                <button type="submit" class="p-1.5 text-rose-600 hover:bg-rose-50 rounded transition" title="Löschen">
+                                    <i class="fas fa-trash-can text-xs"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {{ end }}
+                    {{ if not .Policies }}
+                    <tr>
+                        <td colspan="5" class="px-4 py-8 text-center text-slate-400 italic text-sm">Keine Richtlinien definiert.</td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 {{ end }}

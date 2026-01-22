@@ -66,6 +66,19 @@ func main() {
 		}
 	}()
 
+	// Periodic status polling (Server-side heartbeats/pings)
+	go func() {
+		interval := time.Duration(envOrInt("STATUS_POLL_INTERVAL_SECONDS", 10)) * time.Second
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				controlSvc.BroadcastPing()
+			}
+		}
+	}()
+
 	// Planner (unload/pressure/ttl automation).
 	pl := &planner.Planner{
 		Cluster:      cluster,
@@ -90,6 +103,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("ui init: %v", err)
 	}
+	uiHandler.NodeOfflineTTL = apiRouter.NodeOfflineTTL
 	uiHandler.Register(mux)
 
 	// API endpoints.

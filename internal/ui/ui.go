@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"path/filepath"
 	"sort"
@@ -22,21 +23,22 @@ type CommandSender interface {
 }
 
 type Handler struct {
-	Cluster     *state.ClusterState
-	Commands    CommandSender
-	PolicyStore *policy.Store
-	Auth        *auth.Authenticator
-	Activity    *activity.Log
-	Latency     *metrics.LatencyTracker
-	templateDir string
-	templates   map[string]*template.Template
+	Cluster        *state.ClusterState
+	Commands       CommandSender
+	PolicyStore    *policy.Store
+	Auth           *auth.Authenticator
+	Activity       *activity.Log
+	Latency        *metrics.LatencyTracker
+	templateDir    string
+	templates      map[string]*template.Template
+	NodeOfflineTTL time.Duration
 }
 
 type viewModel struct {
 	Title     string
 	Now       time.Time
 	Nodes     []*state.NodeSnapshot
-	Models    []modelRow
+	Models    []modelGroup
 	Policies  []PolicyViewRow
 	NodeViews []nodeView
 	Activity  []activityRow
@@ -54,12 +56,16 @@ type nodeView struct {
 	Inflight      uint32
 	DataPlaneURL  string
 
-	EWMAms  string
-	ErrRate string
+	EWMAms  float64
+	ErrRate float64
 }
 
-type modelRow struct {
-	ModelID     string
+type modelGroup struct {
+	ModelID string
+	Nodes   []modelNodeInfo
+}
+
+type modelNodeInfo struct {
 	NodeID      string
 	State       string
 	LastSeen    time.Time
@@ -68,14 +74,15 @@ type modelRow struct {
 
 func NewHandler(cluster *state.ClusterState, commands CommandSender, store *policy.Store, act *activity.Log, lat *metrics.LatencyTracker, templateDir string) (*Handler, error) {
 	h := &Handler{
-		Cluster:     cluster,
-		Commands:    commands,
-		PolicyStore: store,
-		Auth:        auth.NewAuthenticator(store),
-		Activity:    act,
-		Latency:     lat,
-		templateDir: templateDir,
-		templates:   make(map[string]*template.Template),
+		Cluster:        cluster,
+		Commands:       commands,
+		PolicyStore:    store,
+		Auth:           auth.NewAuthenticator(store),
+		Activity:       act,
+		Latency:        lat,
+		templateDir:    templateDir,
+		templates:      make(map[string]*template.Template),
+		NodeOfflineTTL: 5 * time.Second,
 	}
 
 	funcMap := template.FuncMap{
@@ -91,6 +98,7 @@ func NewHandler(cluster *state.ClusterState, commands CommandSender, store *poli
 			}
 			return t.Format("02.01.2006 15:04:05")
 		},
+		"upper": strings.ToUpper,
 	}
 
 	pages := []string{"dashboard.html", "nodes.html", "models.html", "policies.html", "activity.html", "keys.html", "login.html", "users.html"}
@@ -172,7 +180,11 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	vm := h.newViewModel("Dashboard")
-	vm.Nodes = h.Cluster.Snapshot()
+	nodes := h.Cluster.Snapshot()
+	sort.Slice(nodes, func(i, j int) bool {
+		return strings.ToLower(nodes[i].NodeID) < strings.ToLower(nodes[j].NodeID)
+	})
+	vm.Nodes = nodes
 	vm.User = h.getUser(r)
 	h.render(w, "dashboard.html", vm)
 }
@@ -182,7 +194,7 @@ func (h *Handler) nodes(w http.ResponseWriter, r *http.Request) {
 	nodes := h.Cluster.Snapshot()
 	user := h.getUser(r)
 
-	ttl := 5 * time.Second
+	ttl := h.NodeOfflineTTL
 	views := make([]nodeView, 0, len(nodes))
 
 	for _, n := range nodes {
@@ -190,25 +202,21 @@ func (h *Handler) nodes(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		online := n.IsOnline(now, ttl)
+		log.Printf("DEBUG: UI nodes: node %s online=%v (last: %v, ttl: %v, now: %v)", n.NodeID, online, n.LastHeartbeat.Format("15:04:05.000"), ttl, now.Format("15:04:05.000"))
 
 		age := "n/a"
 		if !n.LastHeartbeat.IsZero() {
 			age = now.Sub(n.LastHeartbeat).Truncate(100 * time.Millisecond).String()
 		}
 
-		ewma := "n/a"
-		errRate := "n/a"
+		var ewma float64
+		var errRate float64
 		if h.Latency != nil {
 			if l, ok := h.Latency.Get(n.NodeID); ok {
-				if l.EWMAms > 0 {
-					ewma = fmt.Sprintf("%.0fms", l.EWMAms)
-				}
+				ewma = l.EWMAms
 				total := l.OK + l.Error
 				if total > 0 {
-					er := (float64(l.Error) / float64(total)) * 100.0
-					errRate = fmt.Sprintf("%.1f%%", er)
-				} else {
-					errRate = "0.0%"
+					errRate = (float64(l.Error) / float64(total)) * 100.0
 				}
 			}
 		}
@@ -228,26 +236,44 @@ func (h *Handler) nodes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	vm := h.newViewModel("Nodes")
+	sort.Slice(views, func(i, j int) bool {
+		return strings.ToLower(views[i].NodeID) < strings.ToLower(views[j].NodeID)
+	})
 	vm.NodeViews = views
 	vm.User = user
 	h.render(w, "nodes.html", vm)
 }
 
 func (h *Handler) models(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	ttl := h.NodeOfflineTTL
 	nodes := h.Cluster.Snapshot()
-	rows := make([]modelRow, 0, 256)
 	user := h.getUser(r)
+
+	groupsMap := make(map[string]*modelGroup)
 
 	for _, n := range nodes {
 		if user != nil && !auth.CheckACL(user.AllowedNodes, n.NodeID) {
 			continue
 		}
+		online := n.IsOnline(now, ttl)
+		log.Printf("DEBUG: UI models: node %s online=%v (last: %v, ttl: %v, now: %v)", n.NodeID, online, n.LastHeartbeat.Format("15:04:05.000"), ttl, now.Format("15:04:05.000"))
+		if !online {
+			continue
+		}
+
 		for _, m := range n.Models {
 			if user != nil && !auth.CheckACL(user.AllowedModels, m.ModelID) {
 				continue
 			}
-			rows = append(rows, modelRow{
-				ModelID:     m.ModelID,
+
+			group, ok := groupsMap[m.ModelID]
+			if !ok {
+				group = &modelGroup{ModelID: m.ModelID}
+				groupsMap[m.ModelID] = group
+			}
+
+			group.Nodes = append(group.Nodes, modelNodeInfo{
 				NodeID:      n.NodeID,
 				State:       string(m.State),
 				LastSeen:    m.LastSeen,
@@ -256,17 +282,20 @@ func (h *Handler) models(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	sort.Slice(rows, func(i, j int) bool {
-		idI := strings.ToLower(rows[i].ModelID)
-		idJ := strings.ToLower(rows[j].ModelID)
-		if idI != idJ {
-			return idI < idJ
-		}
-		return rows[i].NodeID < rows[j].NodeID
+	groups := make([]modelGroup, 0, len(groupsMap))
+	for _, g := range groupsMap {
+		sort.Slice(g.Nodes, func(i, j int) bool {
+			return g.Nodes[i].NodeID < g.Nodes[j].NodeID
+		})
+		groups = append(groups, *g)
+	}
+
+	sort.Slice(groups, func(i, j int) bool {
+		return strings.ToLower(groups[i].ModelID) < strings.ToLower(groups[j].ModelID)
 	})
 
 	vm := h.newViewModel("Models")
-	vm.Models = rows
+	vm.Models = groups
 	vm.User = user
 	h.render(w, "models.html", vm)
 }

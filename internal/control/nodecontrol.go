@@ -10,6 +10,7 @@ import (
 	"github.com/mcules/llm-router/internal/state"
 
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
@@ -65,6 +66,30 @@ func (s *NodeControlService) SendUnload(nodeID, requestID, modelID string) error
 	return nil
 }
 
+func (s *NodeControlService) BroadcastPing() {
+	s.mu.RLock()
+	// Copy stream pointers to minimize lock hold time
+	streams := make([]*nodeStream, 0, len(s.streams))
+	for _, ns := range s.streams {
+		streams = append(streams, ns)
+	}
+	s.mu.RUnlock()
+
+	msg := &controlplanev1.ServerMessage{
+		Msg: &controlplanev1.ServerMessage_Ping{
+			Ping: &controlplanev1.Ping{TsUnixMs: time.Now().UnixMilli()},
+		},
+	}
+
+	for _, ns := range streams {
+		go func(n *nodeStream) {
+			n.sendMu.Lock()
+			defer n.sendMu.Unlock()
+			_ = n.stream.Send(msg)
+		}(ns)
+	}
+}
+
 func (s *NodeControlService) Stream(stream controlplanev1.NodeControl_StreamServer) error {
 	_ = stream.Send(&controlplanev1.ServerMessage{
 		Msg: &controlplanev1.ServerMessage_Hello{
@@ -97,12 +122,21 @@ func (s *NodeControlService) Stream(stream controlplanev1.NodeControl_StreamServ
 			)
 
 			s.attach(nodeID, stream)
-			log.Printf("node hello: id=%s version=%s llama=%s data=%s",
-				msg.Hello.NodeId, msg.Hello.Version, msg.Hello.LlamaBaseUrl, msg.Hello.DataPlaneUrl)
+			remoteAddr := "unknown"
+			if p, ok := peer.FromContext(stream.Context()); ok {
+				remoteAddr = p.Addr.String()
+			}
+			log.Printf("node hello: id=%s version=%s llama=%s data=%s remote=%s",
+				msg.Hello.NodeId, msg.Hello.Version, msg.Hello.LlamaBaseUrl, msg.Hello.DataPlaneUrl, remoteAddr)
 
 		case *controlplanev1.NodeMessage_Status:
 			if nodeID == "" {
-				nodeID = "unknown"
+				remoteAddr := "unknown"
+				if p, ok := peer.FromContext(stream.Context()); ok {
+					remoteAddr = p.Addr.String()
+				}
+				log.Printf("WARNING: Received status from stream with no nodeID (remote: %s). Closing stream.", remoteAddr)
+				return status.Errorf(codes.FailedPrecondition, "nodeID not established via hello")
 			}
 
 			models := map[string]state.ModelResidency{}
@@ -124,7 +158,24 @@ func (s *NodeControlService) Stream(stream controlplanev1.NodeControl_StreamServ
 				}
 			}
 
+			remoteAddr := "unknown"
+			if p, ok := peer.FromContext(stream.Context()); ok {
+				remoteAddr = p.Addr.String()
+			}
+			log.Printf("node status: id=%s remote=%s ram_avail=%d inflight=%d models=%d", nodeID, remoteAddr, msg.Status.RamAvailableBytes, msg.Status.InflightRequests, len(msg.Status.Models))
 			s.Cluster.UpdateNodeStatus(nodeID, msg.Status.RamTotalBytes, msg.Status.RamAvailableBytes, msg.Status.InflightRequests, models)
+
+			// Verify if this stream is still the authoritative one for this nodeID.
+			s.mu.RLock()
+			currentStream, ok := s.streams[nodeID]
+			s.mu.RUnlock()
+			if ok && currentStream.stream != stream {
+				remoteAddr := "unknown"
+				if p, ok := peer.FromContext(stream.Context()); ok {
+					remoteAddr = p.Addr.String()
+				}
+				log.Printf("WARNING: Received status from non-authoritative stream for node %s (remote: %s). Possible NODE_ID collision!", nodeID, remoteAddr)
+			}
 
 		case *controlplanev1.NodeMessage_Ack:
 			log.Printf("node ack: req=%s ok=%v err=%s", msg.Ack.RequestId, msg.Ack.Ok, msg.Ack.Error)
@@ -141,6 +192,20 @@ func (s *NodeControlService) attach(nodeID string, stream controlplanev1.NodeCon
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	remoteAddr := "unknown"
+	if p, ok := peer.FromContext(stream.Context()); ok {
+		remoteAddr = p.Addr.String()
+	}
+
+	if old, ok := s.streams[nodeID]; ok {
+		oldAddr := "unknown"
+		if p, ok := peer.FromContext(old.stream.Context()); ok {
+			oldAddr = p.Addr.String()
+		}
+		log.Printf("WARNING: node %s re-attached from %s (previous was %s). If these are different nodes, ensure unique NODE_IDs!", nodeID, remoteAddr, oldAddr)
+	}
+
 	s.streams[nodeID] = &nodeStream{stream: stream}
 }
 
