@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/mcules/llm-router/internal/state"
@@ -49,7 +50,9 @@ func (h *ModelsHandler) HandleModels(w http.ResponseWriter, r *http.Request) {
 	for id := range set {
 		modelIDs = append(modelIDs, id)
 	}
-	sort.Strings(modelIDs)
+	sort.Slice(modelIDs, func(i, j int) bool {
+		return strings.ToLower(modelIDs[i]) < strings.ToLower(modelIDs[j])
+	})
 
 	now := time.Now().Unix()
 	out := openAIModelsResponse{

@@ -3,7 +3,7 @@
 
 {{ define "content_policies" }}
 <h1>Policies</h1>
-<p class="muted">Now: {{ .Now }}</p>
+<p class="muted">Now: {{ formatTime .Now }}</p>
 
 <h2>Add / Update Policy</h2>
 <form method="post" action="/ui/policies/save">
@@ -50,7 +50,7 @@
     {{ range .Policies }}
     <tr>
       <td>{{ .ModelID }}</td>
-      <td>{{ .RAMRequiredBytes }}</td>
+      <td>{{ formatRAM .RAMRequiredBytes }}</td>
       <td>{{ .TTLSecs }}</td>
       <td>{{ .Priority }}</td>
       <td>{{ if .Pinned }}yes{{ else }}no{{ end }}</td>

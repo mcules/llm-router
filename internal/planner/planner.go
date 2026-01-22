@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/mcules/llm-router/internal/activity"
@@ -147,7 +148,7 @@ func (p *Planner) handlePressure(ctx context.Context, n *state.NodeSnapshot, nee
 		ti := cands[i].loadedSince
 		tj := cands[j].loadedSince
 		if ti.IsZero() && tj.IsZero() {
-			return cands[i].modelID < cands[j].modelID
+			return strings.ToLower(cands[i].modelID) < strings.ToLower(cands[j].modelID)
 		}
 		if ti.IsZero() {
 			return false

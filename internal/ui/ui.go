@@ -6,6 +6,8 @@ import (
 	"html/template"
 	"net/http"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/mcules/llm-router/internal/activity"
@@ -70,9 +72,25 @@ func NewHandler(cluster *state.ClusterState, commands CommandSender, store *poli
 		templates:   make(map[string]*template.Template),
 	}
 
+	funcMap := template.FuncMap{
+		"formatRAM": func(b uint64) string {
+			if b == 0 {
+				return "0 GB"
+			}
+			return fmt.Sprintf("%.2f GB", float64(b)/(1024*1024*1024))
+		},
+		"formatTime": func(t time.Time) string {
+			if t.IsZero() {
+				return "n/a"
+			}
+			return t.Format("02.01.2006 15:04:05")
+		},
+	}
+
 	pages := []string{"dashboard.html", "nodes.html", "models.html", "policies.html", "activity.html"}
 	for _, page := range pages {
-		tpl, err := template.ParseFiles(
+		tpl := template.New(page).Funcs(funcMap)
+		tpl, err := tpl.ParseFiles(
 			filepath.Join(templateDir, "layout.html"),
 			filepath.Join(templateDir, page),
 		)
@@ -207,6 +225,15 @@ func (h *Handler) models(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		idI := strings.ToLower(rows[i].ModelID)
+		idJ := strings.ToLower(rows[j].ModelID)
+		if idI != idJ {
+			return idI < idJ
+		}
+		return rows[i].NodeID < rows[j].NodeID
+	})
 
 	vm := viewModel{Now: time.Now(), Nodes: nodes, Models: rows}
 	h.render(w, "models.html", vm)

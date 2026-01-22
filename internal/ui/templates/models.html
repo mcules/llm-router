@@ -3,7 +3,7 @@
 
 {{ define "content_models" }}
 <h1>Models</h1>
-<p class="muted">Now: {{ .Now }}</p>
+<p class="muted">Now: {{ formatTime .Now }}</p>
 
 <table>
   <thead>
@@ -22,8 +22,8 @@
       <td>{{ .ModelID }}</td>
       <td>{{ .NodeID }}</td>
       <td>{{ .State }}</td>
-      <td>{{ .LoadedSince }}</td>
-      <td>{{ .LastSeen }}</td>
+      <td>{{ formatTime .LoadedSince }}</td>
+      <td>{{ formatTime .LastSeen }}</td>
       <td>
         <div style="display:flex; gap:4px">
         {{ if eq .State "ready" }}

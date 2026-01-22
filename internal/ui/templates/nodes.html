@@ -3,7 +3,7 @@
 
 {{ define "content_nodes" }}
 <h1>Nodes</h1>
-<p class="muted">Now: {{ .Now }}</p>
+<p class="muted">Now: {{ formatTime .Now }}</p>
 
 <table>
   <thead>
@@ -25,10 +25,10 @@
     <tr>
       <td>{{ .NodeID }}</td>
       <td>{{ if .Online }}online{{ else }}offline{{ end }}</td>
-      <td>{{ .LastHeartbeat }}</td>
+      <td>{{ formatTime .LastHeartbeat }}</td>
       <td>{{ .Age }}</td>
-      <td>{{ .RAMAvail }}</td>
-      <td>{{ .RAMTotal }}</td>
+      <td>{{ formatRAM .RAMAvail }}</td>
+      <td>{{ formatRAM .RAMTotal }}</td>
       <td>{{ .Inflight }}</td>
       <td>{{ .EWMAms }}</td>
       <td>{{ .ErrRate }}</td>

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +31,10 @@ func (h *Handler) policies(w http.ResponseWriter, r *http.Request) {
 			rows = append(rows, res...)
 		}
 	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		return strings.ToLower(rows[i].ModelID) < strings.ToLower(rows[j].ModelID)
+	})
 
 	vm := viewModel{
 		Now:      time.Now(),

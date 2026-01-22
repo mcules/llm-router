@@ -3,7 +3,7 @@
 
 {{ define "content_activity" }}
 <h1>Activity</h1>
-<p class="muted">Now: {{ .Now }}</p>
+<p class="muted">Now: {{ formatTime .Now }}</p>
 
 <table>
   <thead>
@@ -18,7 +18,7 @@
   <tbody>
     {{ range .Activity }}
     <tr>
-      <td>{{ .At }}</td>
+      <td>{{ formatTime .At }}</td>
       <td>{{ .Type }}</td>
       <td>{{ .Node }}</td>
       <td>{{ .Model }}</td>
